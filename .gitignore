@@ -1,0 +1,56 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments and secrets
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Logs and local runtime output
+*.log
+logs/
+*.tmp
+*.temp
+
+# Playwright and browser-generated data
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+.cache/
+
+# Screenshots and captured browser data may contain sensitive information.
+screenshots/
+screenshots/**
+**/screenshots/
+**/screenshots/**
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+!api/frontend/**
+
+# Disposable executor jobs and generated project artifacts
+executor_jobs/
+vultrpilot-executor/
+artifacts/
+uploads/
+*.zip
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

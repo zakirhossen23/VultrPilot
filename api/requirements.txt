@@ -1,0 +1,8 @@
+fastapi==0.115.6
+httpx==0.28.1
+openai==1.59.7
+pydantic==2.10.4
+python-multipart==0.0.20
+websockets==14.1
+uvicorn[standard]==0.34.0
+

@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VultrPilot</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111a2e; --muted:#91a0ba; --text:#eef3ff; --accent:#6d8cff; --line:#253354; }
+    * { box-sizing:border-box; }
+    body { margin:0; height:100vh; overflow:hidden; background:radial-gradient(circle at 50% -10%, #1c2c59 0, var(--bg) 42%); color:var(--text); font:15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    .shell { width:min(960px, 100%); height:100vh; margin:auto; display:flex; flex-direction:column; padding:24px 18px 18px; }
+    header { position:sticky; top:0; z-index:10; flex:none; display:flex; align-items:center; justify-content:space-between; padding:4px 4px 24px; background:linear-gradient(var(--bg) 78%, transparent); }
+    .brand { display:flex; align-items:center; gap:12px; font-weight:700; font-size:20px; letter-spacing:.2px; }
+    .logo { width:34px; height:34px; border-radius:11px; display:grid; place-items:center; background:linear-gradient(135deg,#7b91ff,#4e60cb); box-shadow:0 8px 30px #526ce855; }
+    .header-actions { display:flex; align-items:center; gap:14px; }
+    .approval-mode { padding:6px 8px; border:1px solid var(--line); border-radius:8px; color:var(--text); background:#15223c; font-size:11px; }
+    .status { color:#9de7bc; font-size:12px; display:flex; align-items:center; gap:7px; }
+    .clear { min-width:auto; padding:6px 10px; border:1px solid var(--line); border-radius:8px; color:var(--muted); background:transparent; font-size:11px; font-weight:500; }
+    .clear:hover { color:var(--text); border-color:var(--accent); }
+    .history { margin:0 0 10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:rgba(17,26,46,.62); }
+    .history-title { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+    #history-list { display:flex; gap:7px; overflow-x:auto; }
+    .history-item { flex:0 0 auto; max-width:260px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:#0d172a; color:#cbd6ef; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .history-empty { color:#6f7d98; font-size:12px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:#63d995; box-shadow:0 0 12px #63d995; }
+    main { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; }
+    #messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:18px; padding:24px 8px 24px 0; scrollbar-width:thin; scrollbar-color:#40558b transparent; }
+    .empty { text-align:center; margin:auto; padding:90px 0 50px; color:var(--muted); }
+    .empty h1 { color:var(--text); font-size:34px; margin:0 0 8px; }
+    .empty p { margin:0; }
+    .message { display:flex; gap:12px; max-width:88%; animation:rise .2s ease-out; }
+    .message.user { margin-left:auto; flex-direction:row-reverse; }
+    .avatar { flex:none; width:30px; height:30px; border-radius:10px; display:grid; place-items:center; background:#1d2a49; color:#aebdff; font-size:13px; font-weight:700; }
+    .user .avatar { background:#3047a4; color:white; }
+    .bubble { padding:11px 14px; border:1px solid var(--line); border-radius:15px; background:rgba(17,26,46,.88); white-space:pre-wrap; overflow-wrap:anywhere; }
+    .bubble p { margin:0 0 10px; } .bubble p:last-child { margin-bottom:0; }
+    .bubble h1,.bubble h2,.bubble h3 { margin:0 0 8px; line-height:1.25; } .bubble h1 { font-size:20px; } .bubble h2 { font-size:18px; } .bubble h3 { font-size:16px; }
+    .bubble ul { margin:0 0 10px; padding-left:22px; } .bubble li { margin:3px 0; }
+    .bubble table { width:100%; border-collapse:collapse; margin:8px 0 10px; font-size:13px; display:block; overflow-x:auto; }
+    .bubble th,.bubble td { padding:8px 10px; border:1px solid var(--line); text-align:left; vertical-align:top; min-width:120px; }
+    .bubble th { background:#1a2743; color:#e5ebff; font-weight:700; white-space:nowrap; }
+    .bubble td { background:#0d172a; }
+    .bubble code { padding:2px 5px; border-radius:5px; background:#0a1122; color:#d4ddff; font:13px ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .bubble pre { margin:8px 0 0; padding:11px; overflow:auto; border-radius:8px; background:#080d19; border:1px solid var(--line); white-space:pre; }
+    .bubble pre code { padding:0; background:none; } .bubble a { color:#aebdff; text-decoration:underline; }
+    .chat-image { display:block; width:100%; max-height:440px; object-fit:contain; border-radius:8px; background:#fff; }
+    .message-remove { position:absolute; top:6px; right:6px; z-index:2; min-width:24px; width:24px; height:24px; padding:0; border:0; border-radius:50%; color:#fff; background:#17213acc; font-size:18px; line-height:22px; }
+    .user .bubble { background:#263b92; border-color:#4058bd; }
+    .meta { color:var(--muted); font-size:11px; margin:6px 2px 0; }
+    .event { margin:0 0 0 42px; padding:12px; border:1px solid #294163; border-radius:12px; background:#0d172a; color:#b9c9e7; font-size:13px; }
+    .thinking { color:#b9c9e7; } .thinking::after { content:' '; display:inline-block; width:18px; animation:dots 1.2s steps(4,end) infinite; }
+    .event strong { color:#dce6ff; }
+    .approval-request { border-color:#6d8cff; background:linear-gradient(180deg,#17264a,#0d172a); }
+    .approval-request p { margin:8px 0 4px; color:var(--text); }
+    .approval-actions { display:flex; gap:8px; margin-top:12px; }
+    .approval-actions button { min-width:auto; padding:8px 12px; border-radius:8px; }
+    .approval-actions .deny { background:#3b2638; color:#ffc4d2; }
+    .event img { display:block; width:100%; max-height:360px; object-fit:contain; margin-top:10px; border-radius:8px; border:1px solid var(--line); background:#fff; }
+    .annotation-stage { position:relative; margin-top:10px; width:100%; max-height:440px; overflow:auto; border-radius:8px; background:#fff; }
+    .annotation-stage img { display:block; width:100%; max-height:none; margin:0; border:0; border-radius:0; }
+    .annotation-stage canvas { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; touch-action:none; }
+    .annotation-tools { display:flex; align-items:stretch; gap:2px; margin-top:10px; padding:4px; overflow-x:auto; border:1px solid #3b4350; border-radius:13px; background:#252b35; scrollbar-width:thin; }
+    .annotation-tools button { display:flex; flex:0 0 auto; min-width:64px; min-height:54px; align-items:center; justify-content:center; flex-direction:column; gap:3px; align-self:auto; padding:5px 8px; border:0; border-radius:9px; color:#d4d9e2; background:transparent; font-size:10px; font-weight:500; white-space:nowrap; }
+    .annotation-tools button:hover { background:#343c49; color:#fff; }
+    .annotation-tools button.active { color:#fff; background:#3b4657; box-shadow:inset 0 -2px #9bb0ff; }
+    .annotation-tools .tool-icon { display:block; height:25px; color:#e8ecf4; font-size:24px; line-height:24px; font-weight:300; }
+    .annotation-tools .tool-label { display:block; line-height:14px; }
+    .annotation-options { display:flex; align-items:center; flex-wrap:wrap; gap:5px; padding:4px 7px; border-right:1px solid #454d5a; }
+    .color-swatch { width:18px !important; min-width:18px !important; height:18px !important; min-height:18px !important; padding:0 !important; border:2px solid #687384 !important; border-radius:50% !important; }
+    .color-swatch.active { border-color:#fff !important; box-shadow:0 0 0 2px #8ea4ff !important; }
+    .annotation-font-size { width:48px; padding:4px; border:1px solid #596477; border-radius:6px; color:#e8ecf4; background:#343c49; font-size:10px; }
+    .annotation-text-editor { position:absolute; z-index:3; min-width:100px; padding:4px 6px; border:2px solid #91a7ff; border-radius:5px; outline:none; color:#111827; background:#fff; font:16px sans-serif; }
+    .annotation-tools .annotation-undo { margin-left:0; }
+    .annotation-tools .annotation-add { margin-left:auto; }
+    .console { margin-top:10px; padding:10px; max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:8px; background:#070b14; color:#b8f2c8; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; }
+    form { display:flex; gap:10px; padding-top:12px; }
+    .attach { min-width:auto; align-self:stretch; padding:0 12px; border:1px solid var(--line); background:#15223c; color:#cbd6ef; }
+    .file-list { display:flex; gap:7px; flex-wrap:wrap; padding-top:8px; }
+    .approval-controls { display:flex; align-items:center; gap:8px; padding:9px 2px 0; color:var(--muted); font-size:11px; }
+    .file-chip { padding:5px 9px; border:1px solid var(--line); border-radius:7px; color:#cbd6ef; background:#0d172a; font-size:11px; }
+    .file-remove { margin-left:6px; padding:0 3px; min-width:auto; border:0; color:#aebdff; background:transparent; font-size:14px; line-height:1; }
+    .file-attachments { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .file-preview { width:150px; max-height:150px; object-fit:cover; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    textarea { flex:1; min-height:52px; max-height:180px; resize:vertical; padding:14px 16px; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:15px; outline:none; font:inherit; }
+    textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px #6d8cff22; }
+    button { align-self:stretch; min-width:92px; border:0; border-radius:14px; color:white; background:linear-gradient(135deg,#738aff,#5268dd); font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .hint { color:var(--muted); font-size:11px; text-align:center; margin-top:8px; }
+    @keyframes rise { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+    @keyframes dots { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75%,100% { content:'...'; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><div class="logo">✦</div><span>VultrPilot</span></div>
+      <div class="header-actions"><button class="clear" id="clear" type="button">Clear chat</button><div class="status"><span class="dot"></span> Qwen online</div></div>
+    </header>
+    <main>
+      <section id="messages">
+        <div class="empty" id="empty"><h1>What can I browse for you?</h1><p>VultrPilot uses Qwen and an isolated browser on your Vultr VM.</p></div>
+      </section>
+      <form id="chat-form">
+        <button class="attach" id="attach" type="button">Attach</button>
+        <input id="file-picker" type="file" hidden multiple accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.gif,.webp" />
+        <textarea id="input" placeholder="Ask VultrPilot to inspect a public webpage…" aria-label="Message"></textarea>
+        <button id="send" type="submit">Send</button>
+      </form>
+      <div class="file-list" id="file-list"></div>
+      <div class="approval-controls"><span>Browser permissions:</span><select class="approval-mode" id="approval-mode" aria-label="Browser permission mode" title="Choose how VultrPilot handles browser actions"><option value="approve_once">Quick approve</option><option value="ask_before" selected>Confirm every action</option><option value="full_access">Autopilot</option></select></div>
+      <div class="hint">For public pages only. Never enter passwords or payment information.</div>
+    </main>
+  </div>
+  <script>
+    const form = document.querySelector('#chat-form');
+    const input = document.querySelector('#input');
+    const send = document.querySelector('#send');
+    const messages = document.querySelector('#messages');
+    const empty = document.querySelector('#empty');
+    const clear = document.querySelector('#clear');
+    const approvalMode = document.querySelector('#approval-mode');
+    const attach = document.querySelector('#attach');
+    const filePicker = document.querySelector('#file-picker');
+    const fileList = document.querySelector('#file-list');
+    let selectedFiles = [];
+    const STORAGE_KEY = 'vultrpilot-chat-history-v1';
+    const historyList = document.querySelector('#history-list');
+    const sessionId = (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    let activeThinking = null;
+    let liveBrowserCard = null;
+    let liveSocket = null;
+
+    function connectLiveUpdates() {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      liveSocket = new WebSocket(`${scheme}://${location.host}/ws/${sessionId}`);
+      liveSocket.onmessage = event => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'status' || message.type === 'browser_status') {
+          if (activeThinking && message.data?.message) activeThinking.textContent = message.data.message;
+        }
+        if (message.type === 'browser_screenshot') showLiveBrowser(message.data || {});
+        if (message.type === 'browser_analysis') showBrowserAnalysis(message.data || {});
+        if (message.type === 'analysis') showVisionAnalysis(message.data || {});
+        if (message.type === 'approval_required') showApprovalRequest(message.data || {});
+        if (message.type === 'execution_output') showExecutionOutput(message.data?.chunk || '');
+        if (message.type === 'browser_error' && activeThinking) activeThinking.textContent = `Browser error: ${message.data?.message || 'unknown error'}`;
+      };
+      liveSocket.onclose = () => setTimeout(connectLiveUpdates, 1500);
+    }
+
+    function showApprovalRequest(data) {
+      const card = document.createElement('div'); card.className = 'event approval-request';
+      card.innerHTML = `<strong>VultrPilot wants to act</strong><p>${escapeHtml(data.message || 'Review this browser action before it runs.')}</p><div class="meta">${escapeHtml(data.action || 'browser action')} · ${escapeHtml(data.url || '')}</div>`;
+      const actions = document.createElement('div'); actions.className='approval-actions';
+      const approve = document.createElement('button'); approve.type='button'; approve.textContent='Approve action';
+      const deny = document.createElement('button'); deny.type='button'; deny.textContent='Don’t allow'; deny.className='deny';
+      const respond = approved => { if (liveSocket?.readyState === WebSocket.OPEN) liveSocket.send(JSON.stringify({type:'approval', approved})); approve.disabled=true; deny.disabled=true; card.querySelector('p').textContent = approved ? 'Approved. Continuing…' : 'Not approved. No action was taken.'; };
+      approve.addEventListener('click', () => respond(true)); deny.addEventListener('click', () => respond(false)); actions.append(approve, deny); card.appendChild(actions); messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function showLiveBrowser(data) {
+      if (!liveBrowserCard) {
+        liveBrowserCard = document.createElement('div'); liveBrowserCard.className = 'event live-browser';
+        messages.appendChild(liveBrowserCard);
+      }
+      liveBrowserCard.innerHTML = `<strong>Live isolated browser</strong><br>${escapeHtml(data.phase || 'working')} · ${escapeHtml(data.title || 'Loading page')}`;
+      if (data.url) liveBrowserCard.innerHTML += `<div class="meta">${escapeHtml(data.url)}</div>`;
+      if (data.screenshot_base64) liveBrowserCard.appendChild(createAnnotatedFrame(data));
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function showBrowserAnalysis(data) {
+      const point = data.point || {};
+      const card = document.createElement('div'); card.className = 'event';
+      const target = point.found ? `${point.tag || 'element'}${point.text ? ` · ${point.text}` : ''}` : 'No element found at the annotation';
+      card.innerHTML = `<strong>AI image analysis</strong><br>${escapeHtml(data.message || 'Analyzed the annotation')}<div class="meta">Target: ${escapeHtml(target)}</div>`;
+      if (point.href) card.innerHTML += `<div class="meta">${escapeHtml(point.href)}</div>`;
+      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function showVisionAnalysis(data) {
+      const card = document.createElement('div'); card.className = 'event';
+      card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div><p>${escapeHtml(data.message || 'No visual analysis returned.')}</p>`;
+      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function readHistory() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        const saved = Array.isArray(stored) ? stored : (stored.messages || []);
+        return saved.filter(item => item && ['user', 'assistant'].includes(item.role) && item.text).slice(-30);
+      } catch (_) { return []; }
+    }
+
+    function readStoredChat() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        return Array.isArray(stored) ? {messages:stored, lastImage:null} : stored;
+      } catch (_) { return {messages:[], lastImage:null}; }
+    }
+
+    function saveHistory() {
+      const history = [...messages.querySelectorAll('.message')].map(row => ({
+        role: row.classList.contains('user') ? 'user' : 'assistant',
+        text: row.querySelector('.bubble')?.dataset.raw || row.querySelector('.bubble')?.textContent || '',
+        image_data: row.querySelector('.chat-image')?.src || null,
+        image_source_url: row.querySelector('.chat-image')?.dataset.sourceUrl || null,
+        annotation: (() => { try { return row.querySelector('.chat-image')?.dataset.annotation ? JSON.parse(row.querySelector('.chat-image').dataset.annotation) : null; } catch (_) { return null; } })()
+      }));
+      const stored = readStoredChat();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({messages:history.slice(-30), lastImage:stored.lastImage || null})); } catch (_) {}
+      renderHistoryList();
+    }
+
+    function saveLastImage(data) {
+      const stored = readStoredChat();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({messages:readHistory(), lastImage:{url:data.url, title:data.title, phase:data.phase, screenshot_base64:data.screenshot_base64}})); } catch (_) {}
+    }
+
+    function renderHistoryList() {
+      if (!historyList) return;
+      const saved = readHistory().filter(item => item.role === 'user');
+      historyList.innerHTML = saved.length ? saved.slice(-8).reverse().map(item => `<span class="history-item" title="${escapeHtml(item.text)}">${escapeHtml(item.text)}</span>`).join('') : '<span class="history-empty">No saved messages yet</span>';
+    }
+
+    function renderSelectedFiles() {
+      fileList.innerHTML = '';
+      selectedFiles.forEach((file, index) => {
+        const chip = document.createElement('span'); chip.className = 'file-chip'; chip.textContent = `${file.name} · ${(file.size/1024).toFixed(0)} KB`;
+        const remove = document.createElement('button'); remove.className = 'file-remove'; remove.type = 'button'; remove.textContent = '×'; remove.title = `Remove ${file.name}`;
+        remove.addEventListener('click', () => { selectedFiles.splice(index, 1); renderSelectedFiles(); });
+        chip.appendChild(remove); fileList.appendChild(chip);
+      });
+    }
+
+    async function uploadAttachment(file) {
+      const formData = new FormData(); formData.append('file', file);
+      const response = await fetch('/files', {method:'POST', body:formData});
+      const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || `Could not upload ${file.name}`);
+      return payload;
+    }
+
+    function showUploadedAttachment(bubble, file) {
+      const container = bubble.querySelector('.file-attachments') || Object.assign(document.createElement('div'), {className:'file-attachments'});
+      if (!container.parentElement) bubble.appendChild(container);
+      if (file.content_type?.startsWith('image/')) {
+        const image = document.createElement('img'); image.className='file-preview'; image.src=file.url; image.alt=file.name; image.title=file.name; container.appendChild(image);
+      } else {
+        const chip = document.createElement('span'); chip.className='file-chip'; chip.textContent=`${file.name} · ${(file.size/1024).toFixed(0)} KB`; container.appendChild(chip);
+      }
+    }
+
+    function addMessage(role, text, persist = true) {
+      empty?.remove();
+      const row = document.createElement('div'); row.className = `message ${role}`;
+      const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = role === 'user' ? 'You' : '✦';
+      const content = document.createElement('div');
+      const bubble = document.createElement('div'); bubble.className = 'bubble';
+      bubble.dataset.raw = text || '';
+      if (role === 'assistant') bubble.innerHTML = renderMarkdown(text); else bubble.textContent = text;
+      content.appendChild(bubble); row.append(avatar, content); messages.appendChild(row); messages.scrollTop = messages.scrollHeight;
+      if (persist) saveHistory();
+      return bubble;
+    }
+
+    function addImageMessage(dataUrl, sourceUrl = '', persist = true, annotation = null) {
+      empty?.remove();
+      const row = document.createElement('div'); row.className = 'message user';
+      const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = 'You';
+      const content = document.createElement('div'); const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.style.position='relative'; bubble.dataset.raw = sourceUrl ? `[Annotated browser image] Source URL: ${sourceUrl}` : '[Annotated browser image]';
+      const caption = document.createElement('div'); caption.className = 'meta'; caption.textContent = 'Attached image';
+      const image = document.createElement('img'); image.className = 'chat-image'; image.src = dataUrl; image.alt = 'Annotated browser screenshot'; image.dataset.sourceUrl = sourceUrl;
+      if (annotation) image.dataset.annotation = JSON.stringify(annotation);
+      const source = sourceUrl ? document.createElement('div') : null; if (source) { source.className='meta'; source.textContent=`Source: ${sourceUrl}`; }
+      const remove = document.createElement('button'); remove.className='message-remove'; remove.type='button'; remove.textContent='×'; remove.title='Remove attached image';
+      remove.addEventListener('click', () => { row.remove(); saveHistory(); });
+      bubble.append(caption); if (source) bubble.append(source); bubble.append(image, remove); content.appendChild(bubble); row.append(avatar, content); messages.appendChild(row);
+      if (persist) saveHistory(); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addEvent(event) {
+      const data = event.data || {};
+      if (event.type === 'artifact') { addArtifact(data); return; }
+      if (event.type === 'execution_result') { addExecutionResult(data); return; }
+      if (liveBrowserCard) { liveBrowserCard.remove(); liveBrowserCard = null; }
+      const card = document.createElement('div'); card.className = 'event';
+      card.innerHTML = `<strong>Browser activity</strong><br>Inspected: ${escapeHtml(data.title || data.url || 'public page')}`;
+      if (data.url) card.innerHTML += `<div class="meta">${escapeHtml(data.url)}</div>`;
+      if (data.screenshot_base64) { card.appendChild(createAnnotatedFrame(data)); saveLastImage(data); }
+      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addArtifact(data) {
+      const card = document.createElement('div'); card.className = 'event';
+      card.innerHTML = `<strong>Project ZIP ready</strong><br>${escapeHtml(data.project_name || 'Generated project')} · ${data.files?.length || 0} files`;
+      const link = document.createElement('a'); link.href = data.url; link.download = `${data.project_name || 'vultrpilot-project'}.zip`; link.textContent = 'Download ZIP'; link.style.display='inline-block'; link.style.marginTop='10px'; link.style.color='#aebdff';
+      card.appendChild(document.createElement('br')); card.appendChild(link); messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function showExecutionOutput(chunk) {
+      if (!activeThinking) return;
+      let consoleBox = document.querySelector('.live-console');
+      if (!consoleBox) { consoleBox = document.createElement('div'); consoleBox.className = 'console live-console'; activeThinking.parentElement.appendChild(consoleBox); }
+      consoleBox.textContent += chunk; consoleBox.scrollTop = consoleBox.scrollHeight; messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addExecutionResult(data) {
+      document.querySelector('.live-console')?.remove();
+      const card = document.createElement('div'); card.className = 'event';
+      card.innerHTML = `<strong>Code execution</strong><br>${escapeHtml(data.status || 'completed')} · ${escapeHtml(data.project_name || 'Python project')} · ${escapeHtml(String(data.duration_seconds || 0))}s`;
+      const output = document.createElement('div'); output.className = 'console'; output.textContent = data.output || '(no console output)'; card.appendChild(output);
+      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addSavedImage(data) {
+      const card = document.createElement('div'); card.className = 'event';
+      card.innerHTML = `<strong>Last browser image</strong><br>${escapeHtml(data.title || 'Saved browser state')}`;
+      if (data.url) card.innerHTML += `<div class="meta">${escapeHtml(data.url)}</div>`;
+      if (data.screenshot_base64) card.appendChild(createAnnotatedFrame(data));
+      messages.appendChild(card);
+    }
+
+    function createAnnotatedFrame(data) {
+      const frame = document.createElement('div'); frame.className = 'annotated-frame';
+      const tools = document.createElement('div'); tools.className = 'annotation-tools';
+      const stage = document.createElement('div'); stage.className = 'annotation-stage';
+      const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
+      const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null;
+      let annotationColor = '#ff304f';
+      let textSize = 28;
+      function colorWithAlpha(hex, alpha) {
+        const value = hex.replace('#',''); const number = parseInt(value,16);
+        return `rgba(${number >> 16},${number >> 8 & 255},${number & 255},${alpha})`;
+      }
+      const options = document.createElement('div'); options.className = 'annotation-options';
+      ['#ff304f','#ffd400','#2563eb','#16a34a','#111827','#ffffff'].forEach((value,index) => { const swatch=document.createElement('button'); swatch.type='button'; swatch.className='color-swatch'; if(index===0) swatch.classList.add('active'); swatch.title=`Use ${value}`; swatch.setAttribute('aria-label',`Use ${value}`); swatch.style.background=value; swatch.addEventListener('click',()=>{annotationColor=value; options.querySelectorAll('.color-swatch').forEach(item=>item.classList.remove('active')); swatch.classList.add('active');}); options.appendChild(swatch); });
+      const size = document.createElement('select'); size.className='annotation-font-size'; size.title='Stroke and text size'; [16,22,28,36,48].forEach(value => { const option=document.createElement('option'); option.value=value; option.textContent=`${value}px`; if(value===28) option.selected=true; size.appendChild(option); }); size.addEventListener('change',()=>{textSize=Number(size.value);}); options.appendChild(size); tools.appendChild(options);
+      function placeTextEditor(p) {
+        const rect=canvas.getBoundingClientRect();
+        const editor=document.createElement('input'); editor.type='text'; editor.className='annotation-text-editor'; editor.placeholder='Type text…'; editor.style.left=`${p.x*rect.width/canvas.width}px`; editor.style.top=`${p.y*rect.height/canvas.height}px`; editor.style.zIndex='20'; editor.style.pointerEvents='auto'; editor.addEventListener('pointerdown', event=>event.stopPropagation()); stage.appendChild(editor); editor.focus();
+        const commit=()=>{ if(!editor.isConnected) return; const label=editor.value.trim(); if(label){ const ctx=canvas.getContext('2d'); undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height)); redoStack=[]; ctx.fillStyle=annotationColor; ctx.font=`${textSize}px sans-serif`; ctx.fillText(label,p.x,p.y+textSize); const width=ctx.measureText(label).width; placed.push({left:p.x,top:p.y,right:p.x+width,bottom:p.y+textSize*1.25}); } editor.remove(); };
+        editor.addEventListener('keydown', event=>{ if(event.key==='Enter'){event.preventDefault();commit();} if(event.key==='Escape'){editor.remove();} }); editor.addEventListener('blur',commit);
+      }
+      [['pen','Pen','✎'], ['arrow','Arrow','➜'], ['highlight','Highlight','▰'], ['circle','Circle','○'], ['rectangle','Rectangle','□'], ['text','Text','T'], ['add','Add to chat','↗'], ['undo','Undo','↶'], ['redo','Redo','↷'], ['clear','Clear','⌫']].forEach(([name, label, icon]) => {
+        const button = document.createElement('button'); button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.className = `annotation-tool annotation-${name}`;
+        button.innerHTML = `<span class="tool-icon" aria-hidden="true">${icon}</span><span class="tool-label">${label}</span>`;
+        if (name === 'pen') button.classList.add('active');
+        button.addEventListener('click', () => {
+          const ctx = canvas.getContext('2d');
+          if (name === 'undo') {
+            if (undoStack.length) { redoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(undoStack.pop(), 0, 0); }
+            return;
+          }
+          if (name === 'redo') {
+            if (redoStack.length) { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(redoStack.pop(), 0, 0); }
+            return;
+          }
+          if (name === 'add') { addAnnotatedToChat(img, canvas, data.url || ''); return; }
+          if (name === 'clear') { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+          tool = name; tools.querySelectorAll('.annotation-tool').forEach(item => item.classList.remove('active')); button.classList.add('active');
+        });
+        tools.appendChild(button);
+      });
+      img.onload = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; };
+      const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
+      canvas.addEventListener('pointerdown', event => {
+        const ctx = canvas.getContext('2d'); const p = point(event);
+        if (tool === 'text') { if (!canvas.width && img.naturalWidth) { canvas.width=img.naturalWidth; canvas.height=img.naturalHeight; } if (canvas.width) placeTextEditor(p); return; }
+        if (tool !== 'text') {
+          const target = [...placed].reverse().find(item => p.x >= item.left - textSize && p.x <= item.right + textSize && p.y >= item.top - textSize && p.y <= item.bottom + textSize);
+          if (target) {
+            const pad=Math.max(textSize,12), left=Math.max(0,Math.floor(target.left-pad)), top=Math.max(0,Math.floor(target.top-pad)), right=Math.min(canvas.width,Math.ceil(target.right+pad)), bottom=Math.min(canvas.height,Math.ceil(target.bottom+pad));
+            undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height)); redoStack=[]; moving={target,imageData:ctx.getImageData(left,top,right-left,bottom-top),left,top,oldLeft:left,oldTop:top,width:right-left,height:bottom-top,offsetX:p.x-left,offsetY:p.y-top}; ctx.clearRect(left,top,right-left,bottom-top); drawing=true; canvas.setPointerCapture(event.pointerId); return;
+          }
+        }
+        undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); if (undoStack.length > 20) undoStack.shift(); redoStack=[];
+        drawing = true; start = p; gestureStart=p; gestureEnd=p; snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height); canvas.setPointerCapture(event.pointerId);
+      });
+      canvas.addEventListener('click', event => {
+        if (tool !== 'text' || stage.querySelector('.annotation-text-editor')) return;
+        if (!canvas.width && img.naturalWidth) { canvas.width=img.naturalWidth; canvas.height=img.naturalHeight; }
+        if (canvas.width) placeTextEditor(point(event));
+      });
+      canvas.addEventListener('pointermove', event => {
+        if (!drawing) return; const ctx = canvas.getContext('2d'); const p = point(event);
+        if (moving) { ctx.clearRect(moving.left,moving.top,moving.width,moving.height); moving.left=Math.max(0,Math.min(canvas.width-moving.width,p.x-moving.offsetX)); moving.top=Math.max(0,Math.min(canvas.height-moving.height,p.y-moving.offsetY)); ctx.putImageData(moving.imageData,Math.round(moving.left),Math.round(moving.top)); return; }
+        gestureEnd=p;
+        if (tool === 'circle' || tool === 'rectangle' || tool === 'arrow') ctx.putImageData(snapshot, 0, 0);
+        ctx.strokeStyle = tool === 'highlight' ? colorWithAlpha(annotationColor,.42) : annotationColor; ctx.lineWidth = tool === 'highlight' ? Math.max(textSize * 1.8, canvas.width/35) : Math.max(2, textSize / 4); ctx.lineCap='round';
+        if (tool === 'circle') { const rx=p.x-start.x, ry=p.y-start.y; ctx.beginPath(); ctx.ellipse(start.x+rx/2,start.y+ry/2,Math.abs(rx/2),Math.abs(ry/2),0,0,Math.PI*2); ctx.stroke(); }
+        else if (tool === 'rectangle') { ctx.beginPath(); ctx.rect(start.x, start.y, p.x-start.x, p.y-start.y); ctx.stroke(); }
+        else if (tool === 'arrow') {
+          ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+          const angle = Math.atan2(p.y - start.y, p.x - start.x); const head = Math.max(textSize * 1.4, canvas.width / 45);
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle - Math.PI / 6), p.y - head * Math.sin(angle - Math.PI / 6)); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle + Math.PI / 6), p.y - head * Math.sin(angle + Math.PI / 6)); ctx.stroke();
+        }
+        else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
+      });
+      canvas.addEventListener('pointerup', () => { if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
+      return frame;
+    }
+
+    function annotationBounds(annotationCanvas) {
+      const pixels = annotationCanvas.getContext('2d').getImageData(0, 0, annotationCanvas.width, annotationCanvas.height).data;
+      let minX = annotationCanvas.width, minY = annotationCanvas.height, maxX = -1, maxY = -1;
+      for (let y = 0; y < annotationCanvas.height; y++) for (let x = 0; x < annotationCanvas.width; x++) {
+        if (pixels[(y * annotationCanvas.width + x) * 4 + 3] > 8) { minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
+      }
+      if (maxX < 0) return null;
+      return {left:minX/annotationCanvas.width, top:minY/annotationCanvas.height, right:(maxX+1)/annotationCanvas.width, bottom:(maxY+1)/annotationCanvas.height, x:(minX+maxX)/(2*annotationCanvas.width), y:(minY+maxY)/(2*annotationCanvas.height), image_width:annotationCanvas.width, image_height:annotationCanvas.height};
+    }
+
+    function addAnnotatedToChat(img, annotationCanvas, sourceUrl) {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      const composite = document.createElement('canvas'); composite.width = img.naturalWidth; composite.height = img.naturalHeight;
+      const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
+      const annotation = annotationBounds(annotationCanvas);
+      if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
+      addImageMessage(composite.toDataURL('image/png'), sourceUrl, true, annotation);
+    }
+
+    function renderMarkdown(source) {
+      let html = escapeHtml(source || '');
+      const codeBlocks = [];
+      html = html.replace(/```(?:[\w-]+)?\n?([\s\S]*?)```/g, (_, code) => {
+        const token = `@@CODE${codeBlocks.length}@@`;
+        codeBlocks.push(`<pre><code>${code.trim()}</code></pre>`); return token;
+      });
+      // Support GitHub-style Markdown tables, including escaped pipe characters.
+      html = html.replace(/\\\|/g, '|');
+      const lines = html.split('\n');
+      const renderedLines = [];
+      for (let i = 0; i < lines.length; i++) {
+        const isTableRow = /^\s*\|?.+\|.+\|?\s*$/.test(lines[i]);
+        const isSeparator = i + 1 < lines.length && /^\s*\|?\s*:?-{3,}\s*(\|\s*:?-{3,}\s*)+\|?\s*$/.test(lines[i + 1]);
+        if (isTableRow && isSeparator) {
+          const cells = rowCells(lines[i]);
+          const header = `<thead><tr>${cells.map(cell => `<th>${cell}</th>`).join('')}</tr></thead>`;
+          const body = [];
+          i += 2;
+          while (i < lines.length && /^\s*\|?.+\|.+\|?\s*$/.test(lines[i]) && lines[i].trim()) {
+            body.push(`<tr>${rowCells(lines[i]).map(cell => `<td>${cell}</td>`).join('')}</tr>`); i++;
+          }
+          i--;
+          renderedLines.push(`<table>${header}<tbody>${body.join('')}</tbody></table>`);
+        } else renderedLines.push(lines[i]);
+      }
+      html = renderedLines.join('\n');
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>');
+      html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+      html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>').replace(/_([^_\n]+)_/g, '<em>$1</em>');
+      html = html.split(/\n{2,}/).map(block => /^<(?:h[1-3]|ul|pre|table)>/.test(block) ? block : `<p>${block.replace(/\n/g, '<br>')}</p>`).join('');
+      codeBlocks.forEach((block, index) => { html = html.replace(`@@CODE${index}@@`, block); });
+      return html;
+    }
+
+    function rowCells(row) {
+      return row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+    }
+
+    function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); const text = input.value.trim(); if ((!text && !selectedFiles.length) || send.disabled) return;
+      const previousHistory = readHistory();
+      const filesForUpload = [...selectedFiles];
+      const userBubble = addMessage('user', text || `Attached ${filesForUpload.length} file${filesForUpload.length === 1 ? '' : 's'}`); input.value = ''; selectedFiles = []; filePicker.value = ''; renderSelectedFiles(); send.disabled = true; send.textContent = 'Working…';
+      const thinking = addMessage('assistant', 'Planning your request…');
+      activeThinking = thinking; liveBrowserCard = null;
+      thinking.classList.add('thinking');
+      const statuses = ['Planning your request…', 'Opening the isolated browser…', 'Reading the page results…', 'Preparing the answer…'];
+      let statusIndex = 0;
+      const statusTimer = setInterval(() => {
+        statusIndex = Math.min(statusIndex + 1, statuses.length - 1);
+        thinking.textContent = statuses[statusIndex];
+      }, 1800);
+      try {
+        const uploaded = [];
+        for (const file of filesForUpload) { thinking.textContent = `Uploading ${file.name}…`; const uploadedFile = await uploadAttachment(file); uploaded.push(uploadedFile); showUploadedAttachment(userBubble, uploadedFile); }
+        saveHistory();
+        const annotations = [...messages.querySelectorAll('.chat-image')].map(image => {
+          if (!image.dataset.annotation) return null;
+          try { return {source_url:image.dataset.sourceUrl || '', image_data:image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
+        }).filter(Boolean).slice(-5);
+        const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
+        const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');
+        clearInterval(statusTimer); thinking.classList.remove('thinking');
+        thinking.dataset.raw = payload.reply || 'Done.';
+        thinking.innerHTML = renderMarkdown(payload.reply || 'Done.');
+        saveHistory(); (payload.events || []).forEach(addEvent);
+      } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = `Sorry, I couldn’t complete that: ${error.message}`; thinking.dataset.raw = thinking.textContent; saveHistory(); }
+      finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+    attach.addEventListener('click', () => filePicker.click());
+    filePicker.addEventListener('change', () => { selectedFiles = [...filePicker.files].slice(0, 10); renderSelectedFiles(); });
+
+    clear.addEventListener('click', () => {
+      localStorage.removeItem(STORAGE_KEY); messages.innerHTML = '';
+      renderHistoryList();
+      messages.appendChild(empty || Object.assign(document.createElement('div'), {className:'empty', innerHTML:'<h1>What can I browse for you?</h1><p>VultrPilot uses Qwen and an isolated browser on your Vultr VM.</p>'}));
+    });
+
+    try {
+      const stored = readStoredChat();
+      stored.messages.forEach(item => { addMessage(item.role, item.text, false); if (item.image_data) addImageMessage(item.image_data, item.image_source_url || '', false, item.annotation || null); });
+      if (stored.lastImage) addSavedImage(stored.lastImage);
+    } catch (_) { localStorage.removeItem(STORAGE_KEY); }
+    window.addEventListener('beforeunload', saveHistory);
+    renderHistoryList();
+    connectLiveUpdates();
+  </script>
+</body>
+</html>

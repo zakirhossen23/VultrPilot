@@ -1,0 +1,45 @@
+services:
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - runner
+      - executor
+    volumes:
+      - executor_jobs:/var/lib/vultrpilot-executor
+
+  runner:
+    build: ./runner
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 768m
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  executor:
+    build: ./executor
+    restart: unless-stopped
+    network_mode: none
+    volumes:
+      - executor_jobs:/var/lib/vultrpilot-executor
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  executor_jobs:
+
