@@ -380,6 +380,7 @@ async def chat(request: ChatRequest):
                 "exact titles and URLs; never invent or fill in missing search results. "
                 "For a click request, call browser_task with action click and a precise CSS selector. "
                 "If attached_annotations are present and the user refers to a highlighted or marked area, first use action analyze_point with the supplied normalized x and y coordinates. Explain the identified element, then use action click_point with the same coordinates only when the requested action is safe and the analysis matches the target. "
+                "If a selector click fails because the page changed or the selector no longer matches, retry with action click_point using the verified annotation coordinates instead of claiming failure. "
                 "Never claim that a click happened unless the returned browser result has action=click. "
                 "If the user asks for browser sessions, call list_browser_sessions. "
                 "If the user asks you to build a project or provide a ZIP, generate complete source files "
@@ -457,7 +458,20 @@ async def chat(request: ChatRequest):
                 try:
                     if args.get("action", "inspect") in {"click", "click_point"}:
                         await require_approval(request.session_id, request.approval_mode, args.get("action", "click"), args["url"])
-                    result = await run_browser(args["url"], args["goal"], args.get("action", "inspect"), args.get("selector"), args.get("x"), args.get("y"), request.session_id)
+                    action = args.get("action", "inspect")
+                    try:
+                        result = await run_browser(args["url"], args["goal"], action, args.get("selector"), args.get("x"), args.get("y"), request.session_id)
+                    except Exception as first_error:
+                        # A selector can become stale between vision verification and
+                        # execution. The annotated coordinates are the verified target,
+                        # so use them as a safe fallback for a failed selector click.
+                        fallback = request.annotations[-1].get("annotation", {}) if request.annotations else {}
+                        fallback_x, fallback_y = fallback.get("x"), fallback.get("y")
+                        selector_failed = "No element matched selector" in str(first_error) or "404" in str(first_error)
+                        if action != "click" or not selector_failed or fallback_x is None or fallback_y is None:
+                            raise
+                        await publish(request.session_id, {"type": "status", "data": {"message": "Selector changed; using the verified vision target", "phase": "clicking"}})
+                        result = await run_browser(args["url"], args["goal"], "click_point", None, fallback_x, fallback_y, request.session_id)
                     record.update({"status": "completed", "final_url": result.get("url"), "title": result.get("title"), "finished_at": datetime.now(timezone.utc).isoformat()})
                 except Exception as exc:
                     record.update({"status": "failed", "error": str(exc), "finished_at": datetime.now(timezone.utc).isoformat()})
