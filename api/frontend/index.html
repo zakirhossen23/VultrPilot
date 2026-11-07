@@ -576,6 +576,7 @@
         thinking.innerHTML = renderMarkdown(payload.reply || 'Done.');
         (payload.events || []).forEach(event => addEvent(event, thinking));
         saveHistory();
+        requestAnimationFrame(() => thinking.closest('.message')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
       } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = `Sorry, I couldn’t complete that: ${error.message}`; thinking.dataset.raw = thinking.textContent; saveHistory(); }
       finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
     });
