@@ -479,14 +479,17 @@
         if (tool === 'circle') { const rx=p.x-start.x, ry=p.y-start.y; ctx.beginPath(); ctx.ellipse(start.x+rx/2,start.y+ry/2,Math.abs(rx/2),Math.abs(ry/2),0,0,Math.PI*2); ctx.stroke(); }
         else if (tool === 'rectangle') { ctx.beginPath(); ctx.rect(start.x, start.y, p.x-start.x, p.y-start.y); ctx.stroke(); }
         else if (tool === 'arrow') {
-          const angle = Math.atan2(p.y - start.y, p.x - start.x); const head = Math.max(textSize * 1.8, canvas.width / 38); const shaft = Math.max(6, textSize / 2, canvas.width / 260);
+          const angle = Math.atan2(p.y - start.y, p.x - start.x); const head = Math.max(textSize * 1.2, canvas.width / 70); const shaft = Math.max(4, textSize / 3, canvas.width / 500); const baseDistance = head * .82; const wing = head * .52;
           const drawArrow = (stroke, width, fillHead) => {
             ctx.strokeStyle = stroke; ctx.fillStyle = stroke; ctx.lineWidth = width; ctx.lineCap='round'; ctx.lineJoin='round';
-            ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle - Math.PI / 7), p.y - head * Math.sin(angle - Math.PI / 7)); ctx.lineTo(p.x - head * Math.cos(angle + Math.PI / 7), p.y - head * Math.sin(angle + Math.PI / 7)); ctx.closePath();
+            const baseX = p.x - baseDistance * Math.cos(angle), baseY = p.y - baseDistance * Math.sin(angle);
+            ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(baseX, baseY); ctx.stroke();
+            const leftX = baseX + wing * Math.cos(angle + Math.PI / 2), leftY = baseY + wing * Math.sin(angle + Math.PI / 2);
+            const rightX = baseX + wing * Math.cos(angle - Math.PI / 2), rightY = baseY + wing * Math.sin(angle - Math.PI / 2);
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(leftX, leftY); ctx.lineTo(rightX, rightY); ctx.closePath();
             if (fillHead) ctx.fill(); else ctx.stroke();
           };
-          drawArrow('rgba(0,0,0,.72)', shaft + 7, true);
+          drawArrow('rgba(0,0,0,.72)', shaft + 4, true);
           drawArrow(annotationColor, shaft, true);
         }
         else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
