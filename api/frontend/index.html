@@ -37,7 +37,8 @@
     #browser-sidebar .sidebar-browser { height:100%; display:flex; flex-direction:column; }
     #browser-sidebar .annotated-frame { display:flex; flex:1; min-height:0; flex-direction:column; margin-top:12px; }
     #browser-sidebar .annotation-stage { flex:1; min-height:0; max-height:none; }
-    #browser-sidebar .annotation-stage img { width:100%; height:100%; object-fit:contain; }
+    #browser-sidebar .annotation-stage { overflow:auto; }
+    #browser-sidebar .annotation-stage img { display:block; width:100%; height:auto; min-height:100%; object-fit:contain; object-position:top center; }
     #browser-sidebar .annotation-stage canvas { width:100%; height:100%; }
     #browser-sidebar .annotation-tools { overflow-x:auto; }
     #messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:18px; padding:24px 8px 24px 0; scrollbar-width:thin; scrollbar-color:#40558b transparent; }
@@ -230,6 +231,7 @@
         else liveBrowserFrame.updateScreenshot(data);
       }
     }
+
 
     function resetLiveBrowser() {
       liveBrowserCard = null;
