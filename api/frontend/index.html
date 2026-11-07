@@ -349,23 +349,24 @@
       if (persist) saveHistory(); messages.scrollTop = messages.scrollHeight;
     }
 
-    function addEvent(event) {
+    function addEvent(event, beforeNode = null) {
       const data = event.data || {};
-      if (event.type === 'artifact') { addArtifact(data); return; }
-      if (event.type === 'execution_result') { addExecutionResult(data); return; }
+      if (event.type === 'artifact') { addArtifact(data, beforeNode); return; }
+      if (event.type === 'execution_result') { addExecutionResult(data, beforeNode); return; }
       if (liveBrowserCard) { liveBrowserCard.remove(); liveBrowserCard = null; liveBrowserFrame = null; }
       const card = document.createElement('div'); card.className = 'event';
       card.innerHTML = `<strong>Browser activity</strong><br>Inspected: ${escapeHtml(data.title || data.url || 'public page')}`;
       if (data.url) card.innerHTML += `<div class="meta">${escapeHtml(data.url)}</div>`;
       if (data.screenshot_base64) { showLiveBrowser(data); saveLastImage(data); }
-      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+      if (beforeNode?.parentNode === messages) messages.insertBefore(card, beforeNode); else messages.appendChild(card);
+      messages.scrollTop = messages.scrollHeight;
     }
 
-    function addArtifact(data) {
+    function addArtifact(data, beforeNode = null) {
       const card = document.createElement('div'); card.className = 'event';
       card.innerHTML = `<strong>Project ZIP ready</strong><br>${escapeHtml(data.project_name || 'Generated project')} · ${data.files?.length || 0} files`;
       const link = document.createElement('a'); link.href = data.url; link.download = `${data.project_name || 'vultrpilot-project'}.zip`; link.textContent = 'Download ZIP'; link.style.display='inline-block'; link.style.marginTop='10px'; link.style.color='#aebdff';
-      card.appendChild(document.createElement('br')); card.appendChild(link); messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+      card.appendChild(document.createElement('br')); card.appendChild(link); if (beforeNode?.parentNode === messages) messages.insertBefore(card, beforeNode); else messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
     }
 
     function showExecutionOutput(chunk) {
@@ -375,12 +376,12 @@
       consoleBox.textContent += chunk; consoleBox.scrollTop = consoleBox.scrollHeight; messages.scrollTop = messages.scrollHeight;
     }
 
-    function addExecutionResult(data) {
+    function addExecutionResult(data, beforeNode = null) {
       document.querySelector('.live-console')?.remove();
       const card = document.createElement('div'); card.className = 'event';
       card.innerHTML = `<strong>Code execution</strong><br>${escapeHtml(data.status || 'completed')} · ${escapeHtml(data.project_name || 'Python project')} · ${escapeHtml(String(data.duration_seconds || 0))}s`;
       const output = document.createElement('div'); output.className = 'console'; output.textContent = data.output || '(no console output)'; card.appendChild(output);
-      messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+      if (beforeNode?.parentNode === messages) messages.insertBefore(card, beforeNode); else messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
     }
 
     function addSavedImage(data) {
@@ -573,7 +574,8 @@
         clearInterval(statusTimer); thinking.classList.remove('thinking');
         thinking.dataset.raw = payload.reply || 'Done.';
         thinking.innerHTML = renderMarkdown(payload.reply || 'Done.');
-        saveHistory(); (payload.events || []).forEach(addEvent);
+        (payload.events || []).forEach(event => addEvent(event, thinking));
+        saveHistory();
       } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = `Sorry, I couldn’t complete that: ${error.message}`; thinking.dataset.raw = thinking.textContent; saveHistory(); }
       finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
     });
