@@ -400,7 +400,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -442,6 +442,7 @@
           }
           if (name === 'add') { addAnnotatedToChat(img, canvas, data.url || ''); return; }
           if (name === 'clear') { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+          if (name !== 'crop' && cropSelection && cropSnapshot) { ctx.putImageData(cropSnapshot,0,0); cropSelection=null; cropSnapshot=null; }
           tool = name; tools.querySelectorAll('.annotation-tool').forEach(item => item.classList.remove('active')); button.classList.add('active');
         });
         tools.appendChild(button);
@@ -479,6 +480,9 @@
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
       canvas.addEventListener('pointerdown', event => {
         const ctx = canvas.getContext('2d'); const p = point(event);
+        if (tool === 'crop' && cropSelection && cropSnapshot) {
+          ctx.putImageData(cropSnapshot,0,0); applyCrop(cropSelection); cropSelection=null; cropSnapshot=null; drawing=false; snapshot=null; return;
+        }
         if (tool === 'text') { if (!canvas.width && img.naturalWidth) { canvas.width=img.naturalWidth; canvas.height=img.naturalHeight; } if (canvas.width) placeTextEditor(p); return; }
         if (tool !== 'text' && tool !== 'crop') {
           const target = [...placed].reverse().find(item => p.x >= item.left - textSize && p.x <= item.right + textSize && p.y >= item.top - textSize && p.y <= item.bottom + textSize);
@@ -523,7 +527,7 @@
         }
         else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
       });
-      canvas.addEventListener('pointerup', () => { if (tool === 'crop' && drawing && gestureStart && gestureEnd) { const movedCrop=Math.hypot(gestureEnd.x-gestureStart.x,gestureEnd.y-gestureStart.y)>6; if (movedCrop) { cropSelection={x1:gestureStart.x,y1:gestureStart.y,x2:gestureEnd.x,y2:gestureEnd.y}; if (snapshot) canvas.getContext('2d').putImageData(snapshot,0,0); applyCrop(cropSelection); } else if (imageUndoStack.length) { imageRedoStack.push(captureImageState()); restoreImageState(imageUndoStack.pop()); } } else if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
+      canvas.addEventListener('pointerup', () => { if (tool === 'crop' && drawing && gestureStart && gestureEnd) { const movedCrop=Math.hypot(gestureEnd.x-gestureStart.x,gestureEnd.y-gestureStart.y)>6; if (movedCrop) { cropSelection={x1:gestureStart.x,y1:gestureStart.y,x2:gestureEnd.x,y2:gestureEnd.y}; cropSnapshot=snapshot; drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; return; } } if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
       return frame;
     }
 
