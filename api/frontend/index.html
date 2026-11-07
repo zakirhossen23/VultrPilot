@@ -35,9 +35,10 @@
     .sidebar-live { color:#9de7bc; font-size:11px; font-weight:500; }
     .sidebar-url { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #browser-sidebar .sidebar-browser { height:100%; display:flex; flex-direction:column; }
-    #browser-sidebar .annotated-frame { display:flex; flex:1; min-height:0; flex-direction:column; margin-top:12px; overflow:hidden; }
-    #browser-sidebar .annotation-stage { flex:1; min-height:0; max-height:none; width:100%; overflow:auto; }
-    #browser-sidebar .annotation-stage img { display:block; width:auto; height:100vh; max-width:none; object-fit:initial; }
+    #browser-sidebar .annotated-frame { display:block; height:100%; margin-top:12px; overflow:auto; }
+    #browser-sidebar .annotation-tools { position:sticky; top:0; z-index:4; }
+    #browser-sidebar .annotation-stage { width:100%; height:auto; max-height:none; overflow:visible; }
+    #browser-sidebar .annotation-stage img { display:block; width:100%; height:auto; max-width:100%; object-fit:initial; }
     #browser-sidebar .annotation-stage canvas { width:100%; height:100%; }
     #browser-sidebar .annotation-tools { overflow-x:auto; }
     #messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:18px; padding:24px 8px 24px 0; scrollbar-width:thin; scrollbar-color:#40558b transparent; }
@@ -121,8 +122,6 @@
       main { padding-right:0; }
       #browser-sidebar { flex:0 0 auto; min-width:0; max-height:42vh; }
       #browser-sidebar .sidebar-browser, #browser-sidebar .annotated-frame { height:auto; }
-      #browser-sidebar .annotation-stage { flex:none; height:440px; max-height:440px; }
-      #browser-sidebar .annotation-stage img { width:100%; height:auto; max-width:100%; }
       main { min-height:58vh; }
     }
   </style>
@@ -433,27 +432,12 @@
         });
         tools.appendChild(button);
       });
-      const syncScreenshotSize = () => {
-        if (!img.naturalWidth || !img.naturalHeight) return;
-        const mobile = window.matchMedia('(max-width: 900px)').matches;
-        if (mobile) {
-          stage.style.width = '100%';
-          stage.style.height = '440px';
-        } else {
-          const height = Math.max(window.innerHeight, 720);
-          stage.style.height = `${height}px`;
-          stage.style.width = `${Math.round(height * img.naturalWidth / img.naturalHeight)}px`;
-        }
-        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-      };
-      img.onload = syncScreenshotSize;
-      window.addEventListener('resize', syncScreenshotSize);
+      img.onload = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; };
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
         undoStack = []; redoStack = []; placed = []; moving = null; drawing = false;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
-        syncScreenshotSize();
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
       canvas.addEventListener('pointerdown', event => {

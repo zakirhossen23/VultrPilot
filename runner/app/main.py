@@ -40,7 +40,7 @@ async def run_browser(request: InspectRequest, emit: Callable[[str, dict], Await
                 "url": page.url,
                 "title": await page.title(),
                 "phase": "page_loaded",
-                "screenshot_base64": base64.b64encode(await page.screenshot(type="png")).decode("ascii"),
+                "screenshot_base64": base64.b64encode(await page.screenshot(type="png", full_page=True)).decode("ascii"),
             })
             # Many modern sites, including YouTube, fill the result list after
             # the initial HTML response. Give the page a short render window.
@@ -51,8 +51,19 @@ async def run_browser(request: InspectRequest, emit: Callable[[str, dict], Await
                 if request.action in {"analyze_point", "click_point"}:
                     if request.x is None or request.y is None:
                         raise HTTPException(status_code=400, detail="Normalized x and y coordinates are required for annotated actions")
-                    viewport = page.viewport_size or await page.evaluate("({width: window.innerWidth, height: window.innerHeight})")
-                    point_x, point_y = request.x * viewport["width"], request.y * viewport["height"]
+                    dimensions = await page.evaluate("""() => ({
+                        width: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+                        height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+                        viewport_width: window.innerWidth,
+                        viewport_height: window.innerHeight
+                    })""")
+                    document_x = request.x * dimensions["width"]
+                    document_y = request.y * dimensions["height"]
+                    scroll_x = min(max(document_x - dimensions["viewport_width"] / 2, 0), max(dimensions["width"] - dimensions["viewport_width"], 0))
+                    scroll_y = min(max(document_y - dimensions["viewport_height"] / 2, 0), max(dimensions["height"] - dimensions["viewport_height"], 0))
+                    await page.evaluate("pos => window.scrollTo(pos.x, pos.y)", {"x": scroll_x, "y": scroll_y})
+                    await page.wait_for_timeout(150)
+                    point_x, point_y = document_x - scroll_x, document_y - scroll_y
                     point_info = await page.evaluate(
                         """({x, y}) => {
                           const el = document.elementFromPoint(x, y);
@@ -62,6 +73,7 @@ async def run_browser(request: InspectRequest, emit: Callable[[str, dict], Await
                         }""",
                         {"x": point_x, "y": point_y},
                     )
+                    point_info.update({"document_x": document_x, "document_y": document_y, "scroll_x": scroll_x, "scroll_y": scroll_y, "screenshot_width": dimensions["width"], "screenshot_height": dimensions["height"]})
                     if request.action == "analyze_point":
                         await notify("analysis", {"message": "Analyzed the annotated location", "phase": "analyzed", "point": point_info})
                     else:
@@ -80,7 +92,7 @@ async def run_browser(request: InspectRequest, emit: Callable[[str, dict], Await
                     "url": page.url,
                     "title": await page.title(),
                     "phase": "after_selection",
-                    "screenshot_base64": base64.b64encode(await page.screenshot(type="png")).decode("ascii"),
+                    "screenshot_base64": base64.b64encode(await page.screenshot(type="png", full_page=True)).decode("ascii"),
                 })
             title = await page.title()
             text = (await page.locator("body").inner_text())[:12000]
@@ -98,7 +110,7 @@ async def run_browser(request: InspectRequest, emit: Callable[[str, dict], Await
                     url: a.href
                 })).filter(x => x.title && x.url).slice(0, 20)"""
             )
-            screenshot = await page.screenshot(type="png")
+            screenshot = await page.screenshot(type="png", full_page=True)
             result = {
                 "url": page.url,
                 "title": title,
