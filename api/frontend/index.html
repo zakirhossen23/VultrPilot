@@ -479,13 +479,19 @@
         if (tool === 'circle') { const rx=p.x-start.x, ry=p.y-start.y; ctx.beginPath(); ctx.ellipse(start.x+rx/2,start.y+ry/2,Math.abs(rx/2),Math.abs(ry/2),0,0,Math.PI*2); ctx.stroke(); }
         else if (tool === 'rectangle') { ctx.beginPath(); ctx.rect(start.x, start.y, p.x-start.x, p.y-start.y); ctx.stroke(); }
         else if (tool === 'arrow') {
-          ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-          const angle = Math.atan2(p.y - start.y, p.x - start.x); const head = Math.max(textSize * 1.4, canvas.width / 45);
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle - Math.PI / 6), p.y - head * Math.sin(angle - Math.PI / 6)); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle + Math.PI / 6), p.y - head * Math.sin(angle + Math.PI / 6)); ctx.stroke();
+          const angle = Math.atan2(p.y - start.y, p.x - start.x); const head = Math.max(textSize * 1.8, canvas.width / 38); const shaft = Math.max(6, textSize / 2, canvas.width / 260);
+          const drawArrow = (stroke, width, fillHead) => {
+            ctx.strokeStyle = stroke; ctx.fillStyle = stroke; ctx.lineWidth = width; ctx.lineCap='round'; ctx.lineJoin='round';
+            ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - head * Math.cos(angle - Math.PI / 7), p.y - head * Math.sin(angle - Math.PI / 7)); ctx.lineTo(p.x - head * Math.cos(angle + Math.PI / 7), p.y - head * Math.sin(angle + Math.PI / 7)); ctx.closePath();
+            if (fillHead) ctx.fill(); else ctx.stroke();
+          };
+          drawArrow('rgba(0,0,0,.72)', shaft + 7, true);
+          drawArrow(annotationColor, shaft, true);
         }
         else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
       });
-      canvas.addEventListener('pointerup', () => { if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
+      canvas.addEventListener('pointerup', () => { if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
       return frame;
     }
 
