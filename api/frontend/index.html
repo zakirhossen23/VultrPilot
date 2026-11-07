@@ -24,9 +24,12 @@
     .history-item { flex:0 0 auto; max-width:260px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:#0d172a; color:#cbd6ef; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .history-empty { color:#6f7d98; font-size:12px; }
     .dot { width:7px; height:7px; border-radius:50%; background:#63d995; box-shadow:0 0 12px #63d995; }
-    .workspace { flex:1; min-height:0; display:flex; gap:22px; width:100%; }
-    main { flex:0 0 58%; min-width:0; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; }
-    #browser-sidebar { flex:1 1 42%; min-width:0; min-height:0; overflow-y:auto; padding:16px; border:1px solid var(--line); border-radius:16px; background:rgba(12,20,38,.72); scrollbar-width:thin; scrollbar-color:#40558b transparent; }
+    .workspace { --chat-width:58%; flex:1; min-height:0; display:grid; grid-template-columns:minmax(360px,var(--chat-width)) 8px minmax(320px,1fr); gap:0; width:100%; }
+    main { min-width:0; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; padding-right:12px; }
+    .splitter { position:relative; cursor:col-resize; border-left:1px solid #33456f; border-right:1px solid #33456f; background:#131e36; }
+    .splitter::after { content:'⋮'; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#8fa0c5; font-size:18px; }
+    .splitter:hover, .splitter.dragging { background:#263b6c; border-color:#6d8cff; }
+    #browser-sidebar { min-width:0; min-height:0; overflow-y:auto; padding:16px; border:1px solid var(--line); border-radius:16px; background:rgba(12,20,38,.72); scrollbar-width:thin; scrollbar-color:#40558b transparent; }
     .sidebar-empty { display:grid; place-items:center; min-height:220px; padding:24px; text-align:center; color:var(--muted); font-size:13px; }
     .sidebar-title { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--text); font-weight:700; }
     .sidebar-live { color:#9de7bc; font-size:11px; font-weight:500; }
@@ -109,7 +112,9 @@
     @keyframes rise { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
     @keyframes dots { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75%,100% { content:'...'; } }
     @media (max-width: 900px) {
-      .workspace { flex-direction:column; overflow-y:auto; }
+      .workspace { display:flex; flex-direction:column; overflow-y:auto; }
+      .splitter { display:none; }
+      main { padding-right:0; }
       #browser-sidebar { flex:0 0 auto; min-width:0; max-height:42vh; }
       main { min-height:58vh; }
     }
@@ -136,6 +141,7 @@
       <div class="approval-controls"><span>Browser permissions:</span><select class="approval-mode" id="approval-mode" aria-label="Browser permission mode" title="Choose how VultrPilot handles browser actions"><option value="approve_once">Quick approve</option><option value="ask_before" selected>Confirm every action</option><option value="full_access">Autopilot</option></select></div>
       <div class="hint">For public pages only. Never enter passwords or payment information.</div>
     </main>
+    <div class="splitter" id="splitter" role="separator" aria-label="Resize chat and browser panels" aria-orientation="vertical" tabindex="0"></div>
     <aside id="browser-sidebar" aria-label="Live isolated browser">
       <div class="sidebar-empty">The latest isolated browser screenshot will appear here.</div>
     </aside>
@@ -152,6 +158,8 @@
     const attach = document.querySelector('#attach');
     const filePicker = document.querySelector('#file-picker');
     const fileList = document.querySelector('#file-list');
+    const workspace = document.querySelector('.workspace');
+    const splitter = document.querySelector('#splitter');
     let selectedFiles = [];
     const STORAGE_KEY = 'vultrpilot-chat-history-v1';
     const historyList = document.querySelector('#history-list');
@@ -160,6 +168,18 @@
     let liveBrowserCard = null;
     let liveBrowserFrame = null;
     let liveSocket = null;
+
+    function setPanelWidth(value) {
+      const width = Math.max(35, Math.min(75, Number(value) || 58));
+      workspace.style.setProperty('--chat-width', `${width}%`);
+      splitter.setAttribute('aria-valuenow', String(Math.round(width)));
+    }
+    setPanelWidth(localStorage.getItem('vultrpilot-chat-width') || 58);
+    let resizing = false;
+    splitter.addEventListener('pointerdown', event => { if (window.matchMedia('(max-width: 900px)').matches) return; resizing = true; splitter.classList.add('dragging'); splitter.setPointerCapture(event.pointerId); event.preventDefault(); });
+    splitter.addEventListener('pointermove', event => { if (!resizing) return; const rect = workspace.getBoundingClientRect(); setPanelWidth(((event.clientX - rect.left) / rect.width) * 100); });
+    splitter.addEventListener('pointerup', () => { if (!resizing) return; resizing = false; splitter.classList.remove('dragging'); localStorage.setItem('vultrpilot-chat-width', workspace.style.getPropertyValue('--chat-width').replace('%','')); });
+    splitter.addEventListener('keydown', event => { if (event.key === 'ArrowLeft') { event.preventDefault(); setPanelWidth(parseFloat(getComputedStyle(workspace).getPropertyValue('--chat-width')) - 3); } if (event.key === 'ArrowRight') { event.preventDefault(); setPanelWidth(parseFloat(getComputedStyle(workspace).getPropertyValue('--chat-width')) + 3); } localStorage.setItem('vultrpilot-chat-width', workspace.style.getPropertyValue('--chat-width').replace('%','')); });
 
     function connectLiveUpdates() {
       const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
