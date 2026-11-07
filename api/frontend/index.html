@@ -440,9 +440,22 @@
             else if (imageRedoStack.length) { imageUndoStack.push(captureImageState()); restoreImageState(imageRedoStack.pop()); }
             return;
           }
-          if (name === 'add') { addAnnotatedToChat(img, canvas, data.url || ''); return; }
+          if (name === 'add') {
+            if (cropSelection && cropSnapshot) {
+              const pendingCrop = cropSelection;
+              ctx.putImageData(cropSnapshot, 0, 0);
+              cropSelection = null; cropSnapshot = null;
+              applyCrop(pendingCrop);
+            }
+            addAnnotatedToChat(img, canvas, data.url || ''); return;
+          }
           if (name === 'clear') { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
-          if (name !== 'crop' && cropSelection && cropSnapshot) { ctx.putImageData(cropSnapshot,0,0); cropSelection=null; cropSnapshot=null; }
+          if (name !== 'crop' && cropSelection && cropSnapshot) {
+            const pendingCrop = cropSelection;
+            ctx.putImageData(cropSnapshot, 0, 0);
+            cropSelection = null; cropSnapshot = null;
+            applyCrop(pendingCrop);
+          }
           tool = name; tools.querySelectorAll('.annotation-tool').forEach(item => item.classList.remove('active')); button.classList.add('active');
         });
         tools.appendChild(button);
