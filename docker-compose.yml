@@ -4,7 +4,9 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "8000:8000"
+      # Keep the application behind Caddy. The API is no longer exposed
+      # directly to the public internet on port 8000.
+      - "127.0.0.1:8000:8000"
     depends_on:
       - runner
       - executor
@@ -40,6 +42,21 @@ services:
     tmpfs:
       - /tmp
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
 volumes:
   executor_jobs:
+  caddy_data:
+  caddy_config:
 

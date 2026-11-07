@@ -50,6 +50,13 @@
     .event { margin:0 0 0 42px; padding:12px; border:1px solid #294163; border-radius:12px; background:#0d172a; color:#b9c9e7; font-size:13px; }
     .thinking { color:#b9c9e7; } .thinking::after { content:' '; display:inline-block; width:18px; animation:dots 1.2s steps(4,end) infinite; }
     .event strong { color:#dce6ff; }
+    .event p { margin:8px 0 0; line-height:1.55; }
+    .event h1,.event h2,.event h3 { margin:8px 0 6px; color:#e5ebff; line-height:1.25; }
+    .event h1 { font-size:19px; } .event h2 { font-size:17px; } .event h3 { font-size:15px; }
+    .event ul { margin:8px 0 0; padding-left:22px; }
+    .event li { margin:3px 0; }
+    .event code { padding:2px 5px; border-radius:5px; background:#080d19; color:#d4ddff; }
+    .event a { color:#aebdff; text-decoration:underline; }
     .approval-request { border-color:#6d8cff; background:linear-gradient(180deg,#17264a,#0d172a); }
     .approval-request p { margin:8px 0 4px; color:var(--text); }
     .approval-actions { display:flex; gap:8px; margin-top:12px; }
@@ -72,6 +79,10 @@
     .annotation-text-editor { position:absolute; z-index:3; min-width:100px; padding:4px 6px; border:2px solid #91a7ff; border-radius:5px; outline:none; color:#111827; background:#fff; font:16px sans-serif; }
     .annotation-tools .annotation-undo { margin-left:0; }
     .annotation-tools .annotation-add { margin-left:auto; }
+    .annotation-tools .annotation-add { color:#171717; background:#ffd400; box-shadow:0 2px 0 #b99b00; }
+    .annotation-tools .annotation-add:hover { color:#111; background:#ffe45c; }
+    .annotation-tools .annotation-add .tool-icon { color:#111; }
+    .annotation-tools .annotation-add.active { color:#111; background:#ffd400; box-shadow:0 2px 0 #b99b00; }
     .console { margin-top:10px; padding:10px; max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:8px; background:#070b14; color:#b8f2c8; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; }
     form { display:flex; gap:10px; padding-top:12px; }
     .attach { min-width:auto; align-self:stretch; padding:0 12px; border:1px solid var(--line); background:#15223c; color:#cbd6ef; }
@@ -180,7 +191,7 @@
 
     function showVisionAnalysis(data) {
       const card = document.createElement('div'); card.className = 'event';
-      card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div><p>${escapeHtml(data.message || 'No visual analysis returned.')}</p>`;
+      card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div>${renderMarkdown(data.message || 'No visual analysis returned.')}`;
       messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
     }
 
@@ -263,7 +274,7 @@
       return bubble;
     }
 
-    function addImageMessage(dataUrl, sourceUrl = '', persist = true, annotation = null) {
+    function addImageMessage(dataUrl, sourceUrl = '', persist = true, annotation = null, pending = false) {
       empty?.remove();
       const row = document.createElement('div'); row.className = 'message user';
       const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = 'You';
@@ -271,6 +282,7 @@
       const caption = document.createElement('div'); caption.className = 'meta'; caption.textContent = 'Attached image';
       const image = document.createElement('img'); image.className = 'chat-image'; image.src = dataUrl; image.alt = 'Annotated browser screenshot'; image.dataset.sourceUrl = sourceUrl;
       if (annotation) image.dataset.annotation = JSON.stringify(annotation);
+      if (pending) image.dataset.pending = 'true';
       const source = sourceUrl ? document.createElement('div') : null; if (source) { source.className='meta'; source.textContent=`Source: ${sourceUrl}`; }
       const remove = document.createElement('button'); remove.className='message-remove'; remove.type='button'; remove.textContent='×'; remove.title='Remove attached image';
       remove.addEventListener('click', () => { row.remove(); saveHistory(); });
@@ -417,7 +429,7 @@
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
       const annotation = annotationBounds(annotationCanvas);
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
-      addImageMessage(composite.toDataURL('image/png'), sourceUrl, true, annotation);
+      addImageMessage(composite.toDataURL('image/png'), sourceUrl, true, annotation, true);
     }
 
     function renderMarkdown(source) {
@@ -483,12 +495,16 @@
         const uploaded = [];
         for (const file of filesForUpload) { thinking.textContent = `Uploading ${file.name}…`; const uploadedFile = await uploadAttachment(file); uploaded.push(uploadedFile); showUploadedAttachment(userBubble, uploadedFile); }
         saveHistory();
-        const annotations = [...messages.querySelectorAll('.chat-image')].map(image => {
+        // Only images explicitly added to the current composer are sent.
+        // Earlier browser images remain visible but are not reused.
+        const pendingImages = [...messages.querySelectorAll('.chat-image[data-pending="true"]')];
+        const annotations = pendingImages.map(image => {
           if (!image.dataset.annotation) return null;
           try { return {source_url:image.dataset.sourceUrl || '', image_data:image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
         }).filter(Boolean).slice(-5);
         const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
         const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');
+        pendingImages.forEach(image => { delete image.dataset.pending; });
         clearInterval(statusTimer); thinking.classList.remove('thinking');
         thinking.dataset.raw = payload.reply || 'Done.';
         thinking.innerHTML = renderMarkdown(payload.reply || 'Done.');

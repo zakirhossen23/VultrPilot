@@ -69,7 +69,16 @@ API key only in a local or VM `.env` file; `.env` is intentionally ignored.
   disposable instances.
 - Keep all API keys on the VM and place the public service behind TLS and an
   appropriate access control layer before using it beyond a demo.
-- The public demo used during development was `http://45.76.144.49:8000/`.
+- Production/demo deployment uses Caddy for automatic HTTPS at
+  `https://vultrpilot.baharsoftbd.com/`. The API remains bound to localhost on
+  port 8000 and is not exposed directly to the public internet.
+
+### HTTPS deployment
+
+Create an `A` record for `vultrpilot.baharsoftbd.com` pointing to the Vultr VM
+IP, then run `docker compose up -d --build`. Caddy listens on ports 80 and 443,
+obtains and renews the certificate automatically, and proxies traffic to the
+internal `api:8000` service. Keep ports 80 and 443 open in the Vultr firewall.
 
 ## Repository layout
 
@@ -90,3 +99,8 @@ the selected UI mode explicitly permits them. The executor has no network
 interface and applies CPU, memory, file-size, process-count, and wall-clock
 limits, but it should still be deployed as an untrusted-code boundary rather
 than treated as a complete security guarantee.
+
+## Submission assets
+
+- [Challenge 1 presentation](VultrPilot%20%E2%80%94%20Challenge%201%20Submission%20Deck.pptx)
+- Live demo: https://vultrpilot.baharsoftbd.com/
