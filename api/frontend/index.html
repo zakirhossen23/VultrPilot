@@ -93,6 +93,10 @@
     .color-swatch { width:18px !important; min-width:18px !important; height:18px !important; min-height:18px !important; padding:0 !important; border:2px solid #687384 !important; border-radius:50% !important; }
     .color-swatch.active { border-color:#fff !important; box-shadow:0 0 0 2px #8ea4ff !important; }
     .annotation-font-size { width:48px; padding:4px; border:1px solid #596477; border-radius:6px; color:#e8ecf4; background:#343c49; font-size:10px; }
+    .annotation-zoom { display:flex; align-items:center; gap:3px; margin-left:2px; padding-left:6px; border-left:1px solid #454d5a; }
+    .annotation-zoom button { min-width:24px !important; width:24px; height:24px; min-height:24px !important; padding:0 !important; border:1px solid #596477 !important; border-radius:5px !important; color:#e8ecf4 !important; background:#343c49 !important; font-size:13px !important; }
+    .annotation-zoom button:hover { background:#52617b !important; }
+    .annotation-zoom span { min-width:38px; color:#cbd6ef; font-size:10px; text-align:center; }
     .annotation-text-editor { position:absolute; z-index:3; min-width:100px; padding:4px 6px; border:2px solid #91a7ff; border-radius:5px; outline:none; color:#111827; background:#fff; font:16px sans-serif; }
     .annotation-tools .annotation-undo { margin-left:0; }
     .annotation-tools .annotation-add { margin-left:auto; }
@@ -406,6 +410,14 @@
       const options = document.createElement('div'); options.className = 'annotation-options';
       ['#ff304f','#ffd400','#2563eb','#16a34a','#111827','#ffffff'].forEach((value,index) => { const swatch=document.createElement('button'); swatch.type='button'; swatch.className='color-swatch'; if(index===0) swatch.classList.add('active'); swatch.title=`Use ${value}`; swatch.setAttribute('aria-label',`Use ${value}`); swatch.style.background=value; swatch.addEventListener('click',()=>{annotationColor=value; options.querySelectorAll('.color-swatch').forEach(item=>item.classList.remove('active')); swatch.classList.add('active');}); options.appendChild(swatch); });
       const size = document.createElement('select'); size.className='annotation-font-size'; size.title='Stroke and text size'; [16,22,28,36,48].forEach(value => { const option=document.createElement('option'); option.value=value; option.textContent=`${value}px`; if(value===28) option.selected=true; size.appendChild(option); }); size.addEventListener('change',()=>{textSize=Number(size.value);}); options.appendChild(size); tools.appendChild(options);
+      let zoomLevel = 1;
+      const zoomControls = document.createElement('div'); zoomControls.className='annotation-zoom';
+      const zoomOut = document.createElement('button'); zoomOut.type='button'; zoomOut.textContent='−'; zoomOut.title='Zoom out';
+      const zoomLabel = document.createElement('span'); zoomLabel.textContent='100%';
+      const zoomIn = document.createElement('button'); zoomIn.type='button'; zoomIn.textContent='+'; zoomIn.title='Zoom in';
+      const setZoom = value => { zoomLevel=Math.max(.6,Math.min(2.4,value)); stage.style.width=`${zoomLevel*100}%`; zoomLabel.textContent=`${Math.round(zoomLevel*100)}%`; };
+      zoomOut.addEventListener('click',()=>setZoom(zoomLevel-.2)); zoomIn.addEventListener('click',()=>setZoom(zoomLevel+.2)); zoomLabel.addEventListener('dblclick',()=>setZoom(1));
+      zoomControls.append(zoomOut,zoomLabel,zoomIn); options.appendChild(zoomControls);
       function placeTextEditor(p) {
         const rect=canvas.getBoundingClientRect();
         const editor=document.createElement('input'); editor.type='text'; editor.className='annotation-text-editor'; editor.placeholder='Type text…'; editor.style.left=`${p.x*rect.width/canvas.width}px`; editor.style.top=`${p.y*rect.height/canvas.height}px`; editor.style.zIndex='20'; editor.style.pointerEvents='auto'; editor.addEventListener('pointerdown', event=>event.stopPropagation()); stage.appendChild(editor); editor.focus();
