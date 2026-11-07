@@ -400,7 +400,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -424,7 +424,7 @@
         const commit=()=>{ if(!editor.isConnected) return; const label=editor.value.trim(); if(label){ const ctx=canvas.getContext('2d'); undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height)); redoStack=[]; ctx.fillStyle=annotationColor; ctx.font=`${textSize}px sans-serif`; ctx.fillText(label,p.x,p.y+textSize); const width=ctx.measureText(label).width; placed.push({left:p.x,top:p.y,right:p.x+width,bottom:p.y+textSize*1.25}); } editor.remove(); };
         editor.addEventListener('keydown', event=>{ if(event.key==='Enter'){event.preventDefault();commit();} if(event.key==='Escape'){editor.remove();} }); editor.addEventListener('blur',commit);
       }
-      [['pen','Pen','✎'], ['arrow','Arrow','➜'], ['highlight','Highlight','▰'], ['circle','Circle','○'], ['rectangle','Rectangle','□'], ['text','Text','T'], ['add','Add to chat','↗'], ['undo','Undo','↶'], ['redo','Redo','↷'], ['clear','Clear','⌫']].forEach(([name, label, icon]) => {
+      [['pen','Pen','✎'], ['arrow','Arrow','➜'], ['highlight','Highlight','▰'], ['circle','Circle','○'], ['rectangle','Rectangle','□'], ['crop','Crop','▣'], ['text','Text','T'], ['add','Add to chat','↗'], ['undo','Undo','↶'], ['redo','Redo','↷'], ['clear','Clear','⌫']].forEach(([name, label, icon]) => {
         const button = document.createElement('button'); button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.className = `annotation-tool annotation-${name}`;
         button.innerHTML = `<span class="tool-icon" aria-hidden="true">${icon}</span><span class="tool-label">${label}</span>`;
         if (name === 'pen') button.classList.add('active');
@@ -445,6 +445,14 @@
         tools.appendChild(button);
       });
       img.onload = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; };
+      function applyCrop(selection) {
+        const left=Math.max(0,Math.floor(Math.min(selection.x1,selection.x2))), top=Math.max(0,Math.floor(Math.min(selection.y1,selection.y2)));
+        const right=Math.min(img.naturalWidth,Math.ceil(Math.max(selection.x1,selection.x2))), bottom=Math.min(img.naturalHeight,Math.ceil(Math.max(selection.y1,selection.y2)));
+        const width=right-left, height=bottom-top; if (width < 12 || height < 12) return;
+        const cropped=document.createElement('canvas'); cropped.width=width; cropped.height=height;
+        const cropCtx=cropped.getContext('2d'); cropCtx.drawImage(img,left,top,width,height,0,0,width,height); cropCtx.drawImage(canvas,left,top,width,height,0,0,width,height);
+        img.src=cropped.toDataURL('image/png'); cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
+      }
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -455,7 +463,7 @@
       canvas.addEventListener('pointerdown', event => {
         const ctx = canvas.getContext('2d'); const p = point(event);
         if (tool === 'text') { if (!canvas.width && img.naturalWidth) { canvas.width=img.naturalWidth; canvas.height=img.naturalHeight; } if (canvas.width) placeTextEditor(p); return; }
-        if (tool !== 'text') {
+        if (tool !== 'text' && tool !== 'crop') {
           const target = [...placed].reverse().find(item => p.x >= item.left - textSize && p.x <= item.right + textSize && p.y >= item.top - textSize && p.y <= item.bottom + textSize);
           if (target) {
             const pad=Math.max(textSize,12), left=Math.max(0,Math.floor(target.left-pad)), top=Math.max(0,Math.floor(target.top-pad)), right=Math.min(canvas.width,Math.ceil(target.right+pad)), bottom=Math.min(canvas.height,Math.ceil(target.bottom+pad));
@@ -474,7 +482,11 @@
         if (!drawing) return; const ctx = canvas.getContext('2d'); const p = point(event);
         if (moving) { ctx.clearRect(moving.left,moving.top,moving.width,moving.height); moving.left=Math.max(0,Math.min(canvas.width-moving.width,p.x-moving.offsetX)); moving.top=Math.max(0,Math.min(canvas.height-moving.height,p.y-moving.offsetY)); ctx.putImageData(moving.imageData,Math.round(moving.left),Math.round(moving.top)); return; }
         gestureEnd=p;
-        if (tool === 'circle' || tool === 'rectangle' || tool === 'arrow') ctx.putImageData(snapshot, 0, 0);
+        if (tool === 'circle' || tool === 'rectangle' || tool === 'arrow' || tool === 'crop') ctx.putImageData(snapshot, 0, 0);
+        if (tool === 'crop') {
+          ctx.save(); ctx.fillStyle='rgba(109,140,255,.16)'; ctx.strokeStyle='#6d8cff'; ctx.lineWidth=Math.max(3,textSize/3); ctx.setLineDash([10,6]);
+          ctx.fillRect(start.x,start.y,p.x-start.x,p.y-start.y); ctx.strokeRect(start.x,start.y,p.x-start.x,p.y-start.y); ctx.restore(); return;
+        }
         ctx.strokeStyle = tool === 'highlight' ? colorWithAlpha(annotationColor,.42) : annotationColor; ctx.lineWidth = tool === 'highlight' ? Math.max(textSize * 1.8, canvas.width/35) : Math.max(2, textSize / 4); ctx.lineCap='round';
         if (tool === 'circle') { const rx=p.x-start.x, ry=p.y-start.y; ctx.beginPath(); ctx.ellipse(start.x+rx/2,start.y+ry/2,Math.abs(rx/2),Math.abs(ry/2),0,0,Math.PI*2); ctx.stroke(); }
         else if (tool === 'rectangle') { ctx.beginPath(); ctx.rect(start.x, start.y, p.x-start.x, p.y-start.y); ctx.stroke(); }
@@ -494,7 +506,7 @@
         }
         else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
       });
-      canvas.addEventListener('pointerup', () => { if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
+      canvas.addEventListener('pointerup', () => { if (tool === 'crop' && drawing && gestureStart && gestureEnd) { cropSelection={x1:gestureStart.x,y1:gestureStart.y,x2:gestureEnd.x,y2:gestureEnd.y}; applyCrop(cropSelection); } else if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
       return frame;
     }
 
