@@ -400,7 +400,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -432,10 +432,12 @@
           const ctx = canvas.getContext('2d');
           if (name === 'undo') {
             if (undoStack.length) { redoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(undoStack.pop(), 0, 0); }
+            else if (imageUndoStack.length) { imageRedoStack.push(captureImageState()); restoreImageState(imageUndoStack.pop()); }
             return;
           }
           if (name === 'redo') {
             if (redoStack.length) { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(redoStack.pop(), 0, 0); }
+            else if (imageRedoStack.length) { imageUndoStack.push(captureImageState()); restoreImageState(imageRedoStack.pop()); }
             return;
           }
           if (name === 'add') { addAnnotatedToChat(img, canvas, data.url || ''); return; }
@@ -444,19 +446,34 @@
         });
         tools.appendChild(button);
       });
-      img.onload = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; };
+      const resetCanvasForImage = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; };
+      img.onload = resetCanvasForImage;
       function applyCrop(selection) {
         const left=Math.max(0,Math.floor(Math.min(selection.x1,selection.x2))), top=Math.max(0,Math.floor(Math.min(selection.y1,selection.y2)));
         const right=Math.min(img.naturalWidth,Math.ceil(Math.max(selection.x1,selection.x2))), bottom=Math.min(img.naturalHeight,Math.ceil(Math.max(selection.y1,selection.y2)));
         const width=right-left, height=bottom-top; if (width < 12 || height < 12) return;
+        imageUndoStack.push(captureImageState()); imageRedoStack=[];
         const cropped=document.createElement('canvas'); cropped.width=width; cropped.height=height;
         const cropCtx=cropped.getContext('2d'); cropCtx.drawImage(img,left,top,width,height,0,0,width,height); cropCtx.drawImage(canvas,left,top,width,height,0,0,width,height);
         img.src=cropped.toDataURL('image/png'); cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
       }
+      function captureImageState() {
+        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})) };
+      }
+      function restoreImageState(state) {
+        placed=(state.placed || []).map(item => ({...item}));
+        img.onload=() => {
+          canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+          if (!state.overlay) { img.onload=resetCanvasForImage; return; }
+          const overlay=new Image(); overlay.onload=()=>canvas.getContext('2d').drawImage(overlay,0,0); overlay.src=state.overlay;
+          img.onload=resetCanvasForImage;
+        };
+        img.src=state.src;
+      }
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        undoStack = []; redoStack = []; placed = []; moving = null; drawing = false;
+        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
