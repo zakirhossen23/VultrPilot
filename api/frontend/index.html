@@ -243,7 +243,7 @@
 
     function showBrowserAnalysis(data) {
       const point = data.point || {};
-      const card = document.createElement('div'); card.className = 'event';
+      const card = document.createElement('div'); card.className = 'event intermediate-activity';
       const target = point.found ? `${point.tag || 'element'}${point.text ? ` · ${point.text}` : ''}` : 'No element found at the annotation';
       card.innerHTML = `<strong>AI image analysis</strong><br>${escapeHtml(data.message || 'Analyzed the annotation')}<div class="meta">Target: ${escapeHtml(target)}</div>`;
       if (point.href) card.innerHTML += `<div class="meta">${escapeHtml(point.href)}</div>`;
@@ -251,7 +251,7 @@
     }
 
     function showVisionAnalysis(data) {
-      const card = document.createElement('div'); card.className = 'event';
+      const card = document.createElement('div'); card.className = 'event intermediate-activity';
       card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div>${renderMarkdown(data.message || 'No visual analysis returned.')}`;
       messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
     }
@@ -356,7 +356,7 @@
       if (event.type === 'artifact') { addArtifact(data, beforeNode); return; }
       if (event.type === 'execution_result') { addExecutionResult(data, beforeNode); return; }
       if (liveBrowserCard) { liveBrowserCard.remove(); liveBrowserCard = null; liveBrowserFrame = null; }
-      const card = document.createElement('div'); card.className = 'event';
+      const card = document.createElement('div'); card.className = 'event intermediate-activity';
       card.innerHTML = `<strong>Browser activity</strong><br>Inspected: ${escapeHtml(data.title || data.url || 'public page')}`;
       if (data.url) card.innerHTML += `<div class="meta">${escapeHtml(data.url)}</div>`;
       if (data.screenshot_base64) { showLiveBrowser(data); saveLastImage(data); }
@@ -629,6 +629,7 @@
         thinking.dataset.raw = payload.reply || 'Done.';
         thinking.innerHTML = renderMarkdown(payload.reply || 'Done.');
         (payload.events || []).forEach(event => addEvent(event, thinking));
+        messages.querySelectorAll('.intermediate-activity').forEach(card => card.remove());
         saveHistory();
         requestAnimationFrame(() => thinking.closest('.message')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
       } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = `Sorry, I couldn’t complete that: ${error.message}`; thinking.dataset.raw = thinking.textContent; saveHistory(); }
