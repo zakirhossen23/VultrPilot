@@ -541,7 +541,9 @@
       return {left:minX/annotationCanvas.width, top:minY/annotationCanvas.height, right:(maxX+1)/annotationCanvas.width, bottom:(maxY+1)/annotationCanvas.height, x:(minX+maxX)/(2*annotationCanvas.width), y:(minY+maxY)/(2*annotationCanvas.height), image_width:annotationCanvas.width, image_height:annotationCanvas.height};
     }
 
-    function addAnnotatedToChat(img, annotationCanvas, sourceUrl) {
+    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl) {
+      if (!img.complete || !img.naturalWidth || !img.naturalHeight) { try { await img.decode(); } catch (_) {} }
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!img.naturalWidth || !img.naturalHeight) return;
       const composite = document.createElement('canvas'); composite.width = img.naturalWidth; composite.height = img.naturalHeight;
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
