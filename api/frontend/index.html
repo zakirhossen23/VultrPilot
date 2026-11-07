@@ -408,6 +408,7 @@
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        undoStack = []; redoStack = []; placed = []; moving = null; drawing = false;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
