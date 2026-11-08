@@ -440,7 +440,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false, croppedImageDataUrl = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -487,7 +487,7 @@
               cropSelection = null; cropSnapshot = null;
               applyCrop(pendingCrop);
             }
-            addAnnotatedToChat(img, canvas, data.url || ''); return;
+            addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped); return;
           }
           if (name === 'clear') { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
           if (name !== 'crop' && cropSelection && cropSnapshot) {
@@ -520,15 +520,17 @@
         imageUndoStack.push(captureImageState()); imageRedoStack=[]; imageWasCropped = true;
         const cropped=document.createElement('canvas'); cropped.width=width; cropped.height=height;
         const cropCtx=cropped.getContext('2d'); cropCtx.drawImage(img,left,top,width,height,0,0,width,height); cropCtx.drawImage(canvas,left,top,width,height,0,0,width,height);
-        img.src=cropped.toDataURL('image/png'); cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
+        croppedImageDataUrl = cropped.toDataURL('image/png');
+        img.src=croppedImageDataUrl; cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
       }
       function captureImageState() {
-        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped };
+        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped, croppedImageDataUrl };
       }
       function restoreImageState(state) {
         placed=(state.placed || []).map(item => ({...item}));
         bakedAnnotation = state.bakedAnnotation ? {...state.bakedAnnotation} : null;
         imageWasCropped = Boolean(state.imageWasCropped);
+        croppedImageDataUrl = state.croppedImageDataUrl || null;
         img.onload=() => {
           canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
           if (!state.overlay) { img.onload=resetCanvasForImage; return; }
@@ -540,7 +542,7 @@
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false;
+        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false; croppedImageDataUrl = null;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
@@ -607,13 +609,20 @@
       return {left:minX/annotationCanvas.width, top:minY/annotationCanvas.height, right:(maxX+1)/annotationCanvas.width, bottom:(maxY+1)/annotationCanvas.height, x:(minX+maxX)/(2*annotationCanvas.width), y:(minY+maxY)/(2*annotationCanvas.height), image_width:annotationCanvas.width, image_height:annotationCanvas.height};
     }
 
-    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl) {
+    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false) {
+      const existingCanvasAnnotation = annotationBounds(annotationCanvas);
+      const savedCrop = cropDataUrl;
+      if (savedCrop && !existingCanvasAnnotation) {
+        const annotation = cropAnnotation || {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'};
+        addImageMessage(savedCrop, sourceUrl, true, annotation, true);
+        return;
+      }
       if (!img.complete || !img.naturalWidth || !img.naturalHeight) { try { await img.decode(); } catch (_) {} }
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!img.naturalWidth || !img.naturalHeight) return;
       const composite = document.createElement('canvas'); composite.width = img.naturalWidth; composite.height = img.naturalHeight;
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
-      const annotation = annotationBounds(annotationCanvas) || bakedAnnotation || (imageWasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
+      const annotation = annotationBounds(annotationCanvas) || cropAnnotation || (wasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
       addImageMessage(composite.toDataURL('image/png'), sourceUrl, true, annotation, true);
     }
