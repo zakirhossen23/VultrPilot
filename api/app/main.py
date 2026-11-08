@@ -99,15 +99,15 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]], attachment
     except (json.JSONDecodeError, TypeError):
         pass
     return {
-        "status": "verified",
-        "has_annotation": structured.get("has_annotation", True),
+        "status": "verified" if structured.get("target") or structured.get("label") else "needs_clarification",
+        "has_annotation": bool(structured.get("has_annotation", False)),
         "target": str(structured.get("target", ""))[:500],
         "label": str(structured.get("label", ""))[:500],
         "control_type": str(structured.get("control_type", ""))[:120],
         "confidence": structured.get("confidence"),
         "browser_x": structured.get("browser_x"),
         "browser_y": structured.get("browser_y"),
-        "page_url": str(structured.get("page_url", ""))[:500],
+        "page_url": str(structured.get("page_url", "") or next((str(item.get("source_url", "")) for item in image_inputs if item.get("source_url")), ""))[:500],
         "observation": raw[:1800],
     }
 
