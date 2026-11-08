@@ -185,6 +185,7 @@ TOOLS = [
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    current_url: str | None = Field(default=None, max_length=2000)
     history: list[dict[str, str]] = Field(default_factory=list, max_length=30)
     session_id: str | None = Field(default=None, max_length=100)
     attachments: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
@@ -422,6 +423,7 @@ async def chat(request: ChatRequest):
                 "For cropped annotations, use the annotation's browser_x and browser_y coordinates for browser actions; x and y describe the cropped image for vision only. "
                 "If a pasted screenshot supplies pasted_image_target with a page URL and normalized x/y, use click_point with those coordinates after vision verification and approval. "
                 "If vision reports has_annotation=false or lacks a reliable target, do not guess; ask the user to mark the target or name the control. "
+                "Correct obvious spelling mistakes and typos while preserving the user's intent, for example interpret 'reposotores' or 'reposotories' as 'repositories'. "
                 "If a selector click fails because the page changed or the selector no longer matches, retry with action click_point using the verified annotation coordinates instead of claiming failure. "
                 "Never claim that a click happened unless the returned browser result has action=click. "
                 "If the user asks for browser sessions, call list_browser_sessions. "
@@ -436,6 +438,8 @@ async def chat(request: ChatRequest):
         if item.get("role") in {"user", "assistant"} and item.get("content"):
             messages.append({"role": item["role"], "content": item["content"][:6000]})
     user_content = request.message
+    if request.current_url:
+        user_content += f"\n\nCurrent live isolated browser page: {request.current_url}"
     if request.attachments:
         names = ", ".join(str(item.get("name", "attachment")) for item in request.attachments[:10])
         user_content += f"\n\nAttached files available for this session (metadata only; contents are not sent to Qwen): {names}"

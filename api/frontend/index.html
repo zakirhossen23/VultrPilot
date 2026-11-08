@@ -799,7 +799,7 @@
           if (!image.dataset.annotation) return null;
           try { return {source_url:image.dataset.sourceUrl || '', file_id:image.dataset.fileId || '', image_url:image.dataset.imageUrl || '', image_data:image.dataset.imageUrl ? '' : image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
         }).filter(Boolean).slice(-1);
-        const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.absolute_url || file.url, source_url:file.source_url || ''})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
+        const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', current_url:latestBrowserUrl, attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.absolute_url || file.url, source_url:file.source_url || ''})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
         const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');
         pendingImages.forEach(image => { delete image.dataset.pending; });
         clearInterval(statusTimer); thinking.classList.remove('thinking');
