@@ -126,6 +126,12 @@
     button { align-self:stretch; min-width:92px; border:0; border-radius:14px; color:white; background:linear-gradient(135deg,#738aff,#5268dd); font-weight:700; cursor:pointer; }
     button:disabled { opacity:.55; cursor:wait; }
     .hint { color:var(--muted); font-size:11px; text-align:center; margin-top:8px; }
+    .context-meter { width:100%; max-width:1200px; margin:8px auto 0; color:var(--muted); font-size:10px; }
+    .context-meter-top { display:flex; justify-content:space-between; gap:8px; margin-bottom:4px; }
+    .context-track { height:4px; overflow:hidden; border-radius:99px; background:#1a2743; }
+    .context-fill { width:0%; height:100%; border-radius:99px; background:#63d995; transition:width .15s ease, background .15s ease; }
+    .context-fill.warn { background:#ffd166; }
+    .context-fill.danger { background:#ff6b81; }
     @keyframes rise { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
     @keyframes dots { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75%,100% { content:'...'; } }
     @media (max-width: 900px) {
@@ -177,6 +183,7 @@
         <button id="send" type="submit">Send</button>
       </form>
       <div class="file-list" id="file-list"></div>
+      <div class="context-meter" aria-live="polite"><div class="context-meter-top"><span>Context usage</span><span id="context-count">0 / 1,048,576 tokens</span></div><div class="context-track"><div class="context-fill" id="context-fill"></div></div></div>
       <div class="approval-controls"><span>Browser permissions:</span><select class="approval-mode" id="approval-mode" aria-label="Browser permission mode" title="Choose how VultrPilot handles browser actions"><option value="approve_once">Quick approve</option><option value="ask_before" selected>Confirm every action</option><option value="full_access">Autopilot</option></select></div>
       <div class="hint">For public pages only. Never enter passwords or payment information.</div>
     </main>
@@ -198,6 +205,8 @@
     const attach = document.querySelector('#attach');
     const filePicker = document.querySelector('#file-picker');
     const fileList = document.querySelector('#file-list');
+    const contextCount = document.querySelector('#context-count');
+    const contextFill = document.querySelector('#context-fill');
     const workspace = document.querySelector('.workspace');
     const splitter = document.querySelector('#splitter');
     const sidebarToggle = document.querySelector('#sidebar-toggle');
@@ -333,6 +342,18 @@
       } catch (_) { return []; }
     }
 
+    function updateContextMeter() {
+      const textChars = input.value.length + readHistory().reduce((total, item) => total + String(item.text || '').length, 0);
+      const imageCount = messages.querySelectorAll('.chat-image').length;
+      const estimatedTokens = Math.ceil(textChars / 4) + imageCount * 1500;
+      const maxTokens = 1048576;
+      const percent = Math.min(100, (estimatedTokens / maxTokens) * 100);
+      contextCount.textContent = `${estimatedTokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens`;
+      contextFill.style.width = `${percent}%`;
+      contextFill.classList.toggle('warn', percent >= 60 && percent < 80);
+      contextFill.classList.toggle('danger', percent >= 80);
+    }
+
     function readStoredChat() {
       try {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -351,6 +372,7 @@
       const stored = readStoredChat();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify({messages:history.slice(-30), lastImage:stored.lastImage || null})); } catch (_) {}
       renderHistoryList();
+      updateContextMeter();
     }
 
     function saveLastImage(data) {
@@ -791,6 +813,7 @@
       } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = friendlyError(error.message); thinking.dataset.raw = thinking.textContent; saveHistory(); }
       finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
     });
+    input.addEventListener('input', updateContextMeter);
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
     attach.addEventListener('click', () => filePicker.click());
     filePicker.addEventListener('change', () => { selectedFiles = [...filePicker.files].slice(0, 10); renderSelectedFiles(); });
@@ -812,6 +835,7 @@
       if (liveSocket) { liveSocket.close(); liveSocket = null; }
       connectLiveUpdates();
       renderHistoryList();
+      updateContextMeter();
       messages.appendChild(empty || Object.assign(document.createElement('div'), {className:'empty', innerHTML:'<h1>What can I browse for you?</h1><p>VultrPilot uses Qwen and an isolated browser on your Vultr VM.</p>'}));
     });
 
@@ -822,6 +846,7 @@
     } catch (_) { localStorage.removeItem(STORAGE_KEY); }
     window.addEventListener('beforeunload', saveHistory);
     renderHistoryList();
+    updateContextMeter();
     connectLiveUpdates();
   </script>
 </body>
