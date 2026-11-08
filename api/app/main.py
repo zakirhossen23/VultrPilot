@@ -545,7 +545,10 @@ async def chat(request: ChatRequest):
                     record.update({"status": "failed", "error": str(exc), "finished_at": datetime.now(timezone.utc).isoformat()})
                     raise
                 events.append({"type": "browser_result", "data": result})
-                messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
+                planner_result = {key: value for key, value in result.items() if key not in {"screenshot_base64", "html"}}
+                if isinstance(planner_result.get("text"), str): planner_result["text"] = planner_result["text"][:12000]
+                if isinstance(planner_result.get("links"), list): planner_result["links"] = planner_result["links"][:80]
+                messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(planner_result, ensure_ascii=False)})
 
             follow_up = await client.chat.completions.create(
                 model=os.getenv("QWEN_MODEL", "Qwen/Qwen3-8B"),
