@@ -3,6 +3,7 @@ import json
 import hashlib
 import zipfile
 import asyncio
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -47,7 +48,7 @@ client = AsyncOpenAI(
 VISION_MODEL = os.getenv("QWEN_VISION_MODEL", "qwen3.8-27b")
 
 
-async def analyze_annotated_images(annotations: list[dict[str, Any]], attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+async def analyze_annotated_images(annotations: list[dict[str, Any]], attachments: list[dict[str, Any]] | None = None, image_urls: list[str] | None = None) -> dict[str, Any]:
     """Verify the marked screenshot with a multimodal Vultr model before actions."""
     content: list[dict[str, Any]] = [{
         "type": "text",
@@ -64,6 +65,7 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]], attachment
     image_inputs = list(annotations[-1:])
     if not image_inputs:
         image_inputs = [item for item in (attachments or []) if str(item.get("content_type", "")).startswith("image/")][-1:]
+    image_inputs.extend({"image_url": url} for url in (image_urls or [])[-1:])
     for item in image_inputs:
         image_url = item.get("image_url") or item.get("file_url")
         image_data = item.get("image_data")
@@ -427,9 +429,10 @@ async def chat(request: ChatRequest):
         names = ", ".join(str(item.get("name", "attachment")) for item in request.attachments[:10])
         user_content += f"\n\nAttached files available for this session (metadata only; contents are not sent to Qwen): {names}"
     image_attachments = [item for item in request.attachments if str(item.get("content_type", "")).startswith("image/")]
-    if request.annotations or image_attachments:
+    pasted_image_urls = [url.rstrip(".,") for url in re.findall(r"https?://[^\s)\]>\"]+", request.message) if "/files/" in url][-2:]
+    if request.annotations or image_attachments or pasted_image_urls:
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
-        vision_analysis = await analyze_annotated_images(request.annotations, image_attachments)
+        vision_analysis = await analyze_annotated_images(request.annotations, image_attachments, pasted_image_urls)
         vision_message = json.dumps(vision_analysis, ensure_ascii=False)
         await publish(request.session_id, {"type": "analysis", "data": {"model": VISION_MODEL, "message": vision_message}})
         user_content += "\n\nCompact vision verification from " + VISION_MODEL + " (JSON only; the image is not passed to the planner):\n" + vision_message
