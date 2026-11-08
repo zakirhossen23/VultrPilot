@@ -470,6 +470,15 @@
         const commit=()=>{ if(!editor.isConnected) return; const label=editor.value.trim(); if(label){ const ctx=canvas.getContext('2d'); undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height)); redoStack=[]; ctx.fillStyle=annotationColor; ctx.font=`${textSize}px sans-serif`; ctx.fillText(label,p.x,p.y+textSize); const width=ctx.measureText(label).width; placed.push({left:p.x,top:p.y,right:p.x+width,bottom:p.y+textSize*1.25}); } editor.remove(); };
         editor.addEventListener('keydown', event=>{ if(event.key==='Enter'){event.preventDefault();commit();} if(event.key==='Escape'){editor.remove();} }); editor.addEventListener('blur',commit);
       }
+      function resetAnnotationInteraction() {
+        drawing=false; moving=null; start=null; gestureStart=null; gestureEnd=null; snapshot=null;
+        if (cropSelection && cropSnapshot) canvas.getContext('2d').putImageData(cropSnapshot, 0, 0);
+        cropSelection=null; cropSnapshot=null;
+      }
+      function activatePenAfterHistoryAction() {
+        tool='pen'; tools.querySelectorAll('.annotation-tool').forEach(item=>item.classList.remove('active'));
+        tools.querySelector('.annotation-pen')?.classList.add('active');
+      }
       [['pen','Pen','✎'], ['arrow','Arrow','➜'], ['highlight','Highlight','▰'], ['circle','Circle','○'], ['rectangle','Rectangle','□'], ['crop','Crop','▣'], ['text','Text','T'], ['add','Add to chat','↗'], ['undo','Undo','↶'], ['redo','Redo','↷'], ['clear','Clear','⌫']].forEach(([name, label, icon]) => {
         const button = document.createElement('button'); button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.className = `annotation-tool annotation-${name}`;
         button.innerHTML = `<span class="tool-icon" aria-hidden="true">${icon}</span><span class="tool-label">${label}</span>`;
@@ -477,11 +486,13 @@
         button.addEventListener('click', () => {
           const ctx = canvas.getContext('2d');
           if (name === 'undo') {
+            resetAnnotationInteraction(); activatePenAfterHistoryAction();
             if (undoStack.length) { redoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(undoStack.pop(), 0, 0); }
             else if (imageUndoStack.length) { imageRedoStack.push(captureImageState()); restoreImageState(imageUndoStack.pop()); }
             return;
           }
           if (name === 'redo') {
+            resetAnnotationInteraction(); activatePenAfterHistoryAction();
             if (redoStack.length) { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); ctx.putImageData(redoStack.pop(), 0, 0); }
             else if (imageRedoStack.length) { imageUndoStack.push(captureImageState()); restoreImageState(imageRedoStack.pop()); }
             return;
@@ -495,7 +506,7 @@
             }
             addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped); return;
           }
-          if (name === 'clear') { undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+          if (name === 'clear') { resetAnnotationInteraction(); undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); activatePenAfterHistoryAction(); return; }
           if (name !== 'crop' && cropSelection && cropSnapshot) {
             const pendingCrop = cropSelection;
             ctx.putImageData(cropSnapshot, 0, 0);
