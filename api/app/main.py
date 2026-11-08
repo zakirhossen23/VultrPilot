@@ -47,7 +47,7 @@ client = AsyncOpenAI(
 VISION_MODEL = os.getenv("QWEN_VISION_MODEL", "qwen3.8-27b")
 
 
-async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> str:
+async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> dict[str, Any]:
     """Verify the marked screenshot with a multimodal Vultr model before actions."""
     content: list[dict[str, Any]] = [{
         "type": "text",
@@ -55,7 +55,8 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> str:
             "Analyze the attached browser screenshot(s). Each image contains a user annotation. "
             "Identify the marked target, its visible label, approximate location, and whether it "
             "appears to be a normal public-page control. Do not click or claim an action. "
-            "Return concise factual observations only."
+            "Return JSON only with keys target, label, control_type, confidence, and observation. "
+            "Keep observation under 500 words."
         ),
     }]
     for item in annotations[-1:]:
@@ -66,14 +67,29 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> str:
         elif isinstance(image_data, str) and image_data.startswith("data:image/"):
             content.append({"type": "image_url", "image_url": {"url": image_data, "detail": "low"}})
     if len(content) == 1:
-        return "No usable annotated image was supplied."
+        return {"status": "no_image", "observation": "No usable annotated image was supplied."}
     result = await client.chat.completions.create(
         model=VISION_MODEL,
         messages=[{"role": "user", "content": content}],
         temperature=0.1,
-        max_tokens=700,
+        max_tokens=400,
     )
-    return (result.choices[0].message.content or "No visual target was identified.").strip()
+    raw = (result.choices[0].message.content or "No visual target was identified.").strip()
+    structured: dict[str, Any] = {}
+    try:
+        candidate = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict): structured = parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return {
+        "status": "verified",
+        "target": str(structured.get("target", ""))[:500],
+        "label": str(structured.get("label", ""))[:500],
+        "control_type": str(structured.get("control_type", ""))[:120],
+        "confidence": structured.get("confidence"),
+        "observation": raw[:1800],
+    }
 
 TOOLS = [
     {
@@ -404,8 +420,9 @@ async def chat(request: ChatRequest):
     if request.annotations:
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
         vision_analysis = await analyze_annotated_images(request.annotations)
-        await publish(request.session_id, {"type": "analysis", "data": {"model": VISION_MODEL, "message": vision_analysis}})
-        user_content += "\n\nVision verification from " + VISION_MODEL + ":\n" + vision_analysis
+        vision_message = json.dumps(vision_analysis, ensure_ascii=False)
+        await publish(request.session_id, {"type": "analysis", "data": {"model": VISION_MODEL, "message": vision_message}})
+        user_content += "\n\nCompact vision verification from " + VISION_MODEL + " (JSON only; the image is not passed to the planner):\n" + vision_message
         user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[-1:]])
     messages.append({"role": "user", "content": user_content})
 
