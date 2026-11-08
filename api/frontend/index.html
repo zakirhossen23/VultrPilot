@@ -375,7 +375,7 @@
       return bubble;
     }
 
-    function addImageMessage(dataUrl, sourceUrl = '', persist = true, annotation = null, pending = false) {
+    function addImageMessage(dataUrl, sourceUrl = '', persist = true, annotation = null, pending = false, fileRef = null) {
       empty?.remove();
       const row = document.createElement('div'); row.className = 'message user';
       const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = 'You';
@@ -384,6 +384,8 @@
       const image = document.createElement('img'); image.className = 'chat-image'; image.src = dataUrl; image.alt = 'Annotated browser screenshot'; image.dataset.sourceUrl = sourceUrl;
       if (annotation) image.dataset.annotation = JSON.stringify(annotation);
       if (pending) image.dataset.pending = 'true';
+      if (fileRef?.id) image.dataset.fileId = fileRef.id;
+      if (fileRef?.absolute_url) image.dataset.imageUrl = fileRef.absolute_url;
       const source = sourceUrl ? document.createElement('div') : null; if (source) { source.className='meta'; source.textContent=`Source: ${sourceUrl}`; }
       const remove = document.createElement('button'); remove.className='message-remove'; remove.type='button'; remove.textContent='×'; remove.title='Remove attached image';
       remove.addEventListener('click', () => { row.remove(); saveHistory(); });
@@ -619,12 +621,21 @@
       return compact.toDataURL('image/jpeg', 0.82);
     }
 
+    async function uploadAnnotatedImage(dataUrl) {
+      const blob = await (await fetch(dataUrl)).blob();
+      const formData = new FormData(); formData.append('file', blob, 'annotated-browser.jpg');
+      const response = await fetch('/files', {method:'POST', body:formData});
+      const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'Could not stage the annotated image');
+      return {...payload, absolute_url:new URL(payload.url, location.origin).href};
+    }
+
     async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false) {
       const existingCanvasAnnotation = annotationBounds(annotationCanvas);
       const savedCrop = cropDataUrl;
       if (savedCrop && !existingCanvasAnnotation) {
         const annotation = cropAnnotation || {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'};
-        addImageMessage(await compactImageDataUrl(savedCrop), sourceUrl, true, annotation, true);
+        const compact = await compactImageDataUrl(savedCrop); const fileRef = await uploadAnnotatedImage(compact);
+        addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
         return;
       }
       if (!img.complete || !img.naturalWidth || !img.naturalHeight) { try { await img.decode(); } catch (_) {} }
@@ -634,7 +645,8 @@
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
       const annotation = annotationBounds(annotationCanvas) || cropAnnotation || (wasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
-      addImageMessage(await compactImageDataUrl(composite.toDataURL('image/png')), sourceUrl, true, annotation, true);
+      const compact = await compactImageDataUrl(composite.toDataURL('image/png')); const fileRef = await uploadAnnotatedImage(compact);
+      addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
     }
 
     function renderMarkdown(source) {
@@ -705,7 +717,7 @@
         const pendingImages = [...messages.querySelectorAll('.chat-image[data-pending="true"]')];
         const annotations = pendingImages.map(image => {
           if (!image.dataset.annotation) return null;
-          try { return {source_url:image.dataset.sourceUrl || '', image_data:image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
+          try { return {source_url:image.dataset.sourceUrl || '', file_id:image.dataset.fileId || '', image_url:image.dataset.imageUrl || '', image_data:image.dataset.imageUrl ? '' : image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
         }).filter(Boolean).slice(-1);
         const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
         const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');

@@ -59,9 +59,12 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> str:
         ),
     }]
     for item in annotations[-1:]:
+        image_url = item.get("image_url") or item.get("file_url")
         image_data = item.get("image_data")
-        if isinstance(image_data, str) and image_data.startswith("data:image/"):
-            content.append({"type": "image_url", "image_url": {"url": image_data}})
+        if isinstance(image_url, str) and image_url.startswith(("https://", "http://")):
+            content.append({"type": "image_url", "image_url": {"url": image_url, "detail": "auto"}})
+        elif isinstance(image_data, str) and image_data.startswith("data:image/"):
+            content.append({"type": "image_url", "image_url": {"url": image_data, "detail": "auto"}})
     if len(content) == 1:
         return "No usable annotated image was supplied."
     result = await client.chat.completions.create(
