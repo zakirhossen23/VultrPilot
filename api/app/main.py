@@ -58,7 +58,7 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> str:
             "Return concise factual observations only."
         ),
     }]
-    for item in annotations[:5]:
+    for item in annotations[-1:]:
         image_data = item.get("image_data")
         if isinstance(image_data, str) and image_data.startswith("data:image/"):
             content.append({"type": "image_url", "image_url": {"url": image_data}})
@@ -390,9 +390,9 @@ async def chat(request: ChatRequest):
             ),
         },
     ]
-    for item in request.history[-30:]:
+    for item in request.history[-12:]:
         if item.get("role") in {"user", "assistant"} and item.get("content"):
-            messages.append({"role": item["role"], "content": item["content"][:12000]})
+            messages.append({"role": item["role"], "content": item["content"][:6000]})
     user_content = request.message
     if request.attachments:
         names = ", ".join(str(item.get("name", "attachment")) for item in request.attachments[:10])
@@ -402,7 +402,7 @@ async def chat(request: ChatRequest):
         vision_analysis = await analyze_annotated_images(request.annotations)
         await publish(request.session_id, {"type": "analysis", "data": {"model": VISION_MODEL, "message": vision_analysis}})
         user_content += "\n\nVision verification from " + VISION_MODEL + ":\n" + vision_analysis
-        user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[:5]])
+        user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[-1:]])
     messages.append({"role": "user", "content": user_content})
 
     try:

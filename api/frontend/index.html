@@ -609,12 +609,22 @@
       return {left:minX/annotationCanvas.width, top:minY/annotationCanvas.height, right:(maxX+1)/annotationCanvas.width, bottom:(maxY+1)/annotationCanvas.height, x:(minX+maxX)/(2*annotationCanvas.width), y:(minY+maxY)/(2*annotationCanvas.height), image_width:annotationCanvas.width, image_height:annotationCanvas.height};
     }
 
+    async function compactImageDataUrl(dataUrl, maxDimension = 1600) {
+      const source = new Image(); source.src = dataUrl;
+      try { await source.decode(); } catch (_) {}
+      if (!source.naturalWidth || !source.naturalHeight) return dataUrl;
+      const scale = Math.min(1, maxDimension / Math.max(source.naturalWidth, source.naturalHeight));
+      const compact = document.createElement('canvas'); compact.width = Math.max(1, Math.round(source.naturalWidth * scale)); compact.height = Math.max(1, Math.round(source.naturalHeight * scale));
+      compact.getContext('2d').drawImage(source, 0, 0, compact.width, compact.height);
+      return compact.toDataURL('image/jpeg', 0.82);
+    }
+
     async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false) {
       const existingCanvasAnnotation = annotationBounds(annotationCanvas);
       const savedCrop = cropDataUrl;
       if (savedCrop && !existingCanvasAnnotation) {
         const annotation = cropAnnotation || {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'};
-        addImageMessage(savedCrop, sourceUrl, true, annotation, true);
+        addImageMessage(await compactImageDataUrl(savedCrop), sourceUrl, true, annotation, true);
         return;
       }
       if (!img.complete || !img.naturalWidth || !img.naturalHeight) { try { await img.decode(); } catch (_) {} }
@@ -624,7 +634,7 @@
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
       const annotation = annotationBounds(annotationCanvas) || cropAnnotation || (wasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
-      addImageMessage(composite.toDataURL('image/png'), sourceUrl, true, annotation, true);
+      addImageMessage(await compactImageDataUrl(composite.toDataURL('image/png')), sourceUrl, true, annotation, true);
     }
 
     function renderMarkdown(source) {
@@ -696,7 +706,7 @@
         const annotations = pendingImages.map(image => {
           if (!image.dataset.annotation) return null;
           try { return {source_url:image.dataset.sourceUrl || '', image_data:image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
-        }).filter(Boolean).slice(-5);
+        }).filter(Boolean).slice(-1);
         const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
         const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');
         pendingImages.forEach(image => { delete image.dataset.pending; });
