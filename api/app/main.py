@@ -449,7 +449,9 @@ async def chat(request: ChatRequest):
         or Path(str(item.get("name", ""))).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
     )]
     pasted_image_urls = [url.rstrip(".,") for url in re.findall(r"https?://[^\s)\]>\"]+", request.message) if "/files/" in url][-2:]
-    if request.annotations or image_attachments or pasted_image_urls:
+    vision_words = re.search(r"\b(annotat(?:e|ed|ion)?|marked|highlight(?:ed)?|arrow|rectangle|circle|screenshot|image|pictured|shown)\b", request.message, re.IGNORECASE)
+    vision_requested = bool(request.annotations or vision_words)
+    if vision_requested and (request.annotations or image_attachments or pasted_image_urls):
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
         vision_analysis = await analyze_annotated_images(request.annotations, image_attachments, pasted_image_urls, request.message)
         vision_message = json.dumps(vision_analysis, ensure_ascii=False)
@@ -459,6 +461,8 @@ async def chat(request: ChatRequest):
             user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[-1:]])
         elif vision_analysis.get("browser_x") is not None and vision_analysis.get("browser_y") is not None:
             user_content += "\n\npasted_image_target (use click_point only after approval): " + json.dumps({"url": vision_analysis.get("page_url"), "x": vision_analysis.get("browser_x"), "y": vision_analysis.get("browser_y")})
+    elif image_attachments:
+        user_content += "\n\nAn image is attached as reference only. The user did not request visual annotation analysis; use the current page and normal browser inspection for the requested action."
     messages.append({"role": "user", "content": user_content})
 
     try:
