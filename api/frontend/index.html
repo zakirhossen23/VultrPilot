@@ -446,7 +446,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false, croppedImageDataUrl = null, annotationPoint = null, bakedTargetPoint = null;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false, croppedImageDataUrl = null, annotationPoint = null, bakedTargetPoint = null, bakedBrowserPoint = null, browserCropRect = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -472,7 +472,7 @@
       }
       function resetAnnotationInteraction() {
         drawing=false; moving=null; start=null; gestureStart=null; gestureEnd=null; snapshot=null;
-        annotationPoint=null; bakedTargetPoint=null;
+        annotationPoint=null; bakedTargetPoint=null; bakedBrowserPoint=null; browserCropRect=null;
         if (cropSelection && cropSnapshot) canvas.getContext('2d').putImageData(cropSnapshot, 0, 0);
         cropSelection=null; cropSnapshot=null;
       }
@@ -505,7 +505,8 @@
               cropSelection = null; cropSnapshot = null;
               applyCrop(pendingCrop);
             }
-            addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped, annotationPoint || bakedTargetPoint); return;
+            const currentBrowserPoint = annotationPoint && browserCropRect ? {x:browserCropRect.left + annotationPoint.x * browserCropRect.width, y:browserCropRect.top + annotationPoint.y * browserCropRect.height} : (annotationPoint || bakedBrowserPoint);
+            addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped, annotationPoint || bakedTargetPoint, currentBrowserPoint); return;
           }
           if (name === 'clear') { resetAnnotationInteraction(); undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); activatePenAfterHistoryAction(); return; }
           if (name !== 'crop' && cropSelection && cropSnapshot) {
@@ -539,6 +540,9 @@
           const pointX = annotationPoint.x * img.naturalWidth, pointY = annotationPoint.y * img.naturalHeight;
           bakedTargetPoint = {x:Math.max(0, Math.min(1, (pointX-left)/width)), y:Math.max(0, Math.min(1, (pointY-top)/height))};
         }
+        bakedBrowserPoint = annotationPoint ? {...annotationPoint} : {x:(left+right)/(2*img.naturalWidth), y:(top+bottom)/(2*img.naturalHeight)};
+        browserCropRect = {left:left/img.naturalWidth, top:top/img.naturalHeight, width:width/img.naturalWidth, height:height/img.naturalHeight};
+        annotationPoint = null;
         imageUndoStack.push(captureImageState()); imageRedoStack=[]; imageWasCropped = true;
         const cropped=document.createElement('canvas'); cropped.width=width; cropped.height=height;
         const cropCtx=cropped.getContext('2d'); cropCtx.drawImage(img,left,top,width,height,0,0,width,height); cropCtx.drawImage(canvas,left,top,width,height,0,0,width,height);
@@ -546,7 +550,7 @@
         img.src=croppedImageDataUrl; cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
       }
       function captureImageState() {
-        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped, croppedImageDataUrl, bakedTargetPoint: bakedTargetPoint ? {...bakedTargetPoint} : null };
+        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped, croppedImageDataUrl, bakedTargetPoint: bakedTargetPoint ? {...bakedTargetPoint} : null, bakedBrowserPoint: bakedBrowserPoint ? {...bakedBrowserPoint} : null, browserCropRect: browserCropRect ? {...browserCropRect} : null };
       }
       function restoreImageState(state) {
         placed=(state.placed || []).map(item => ({...item}));
@@ -554,6 +558,8 @@
         imageWasCropped = Boolean(state.imageWasCropped);
         croppedImageDataUrl = state.croppedImageDataUrl || null;
         bakedTargetPoint = state.bakedTargetPoint ? {...state.bakedTargetPoint} : null;
+        bakedBrowserPoint = state.bakedBrowserPoint ? {...state.bakedBrowserPoint} : null;
+        browserCropRect = state.browserCropRect ? {...state.browserCropRect} : null;
         img.onload=() => {
           canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
           if (!state.overlay) { img.onload=resetCanvasForImage; return; }
@@ -565,7 +571,7 @@
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false; croppedImageDataUrl = null; annotationPoint = null; bakedTargetPoint = null;
+        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false; croppedImageDataUrl = null; annotationPoint = null; bakedTargetPoint = null; bakedBrowserPoint = null; browserCropRect = null;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
@@ -650,12 +656,13 @@
       return {...payload, absolute_url:new URL(payload.url, location.origin).href};
     }
 
-    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false, targetPoint = null) {
+    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false, targetPoint = null, browserPoint = null) {
       const existingCanvasAnnotation = annotationBounds(annotationCanvas);
       const savedCrop = cropDataUrl;
       if (savedCrop && !existingCanvasAnnotation) {
         const annotation = cropAnnotation || {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'};
         if (targetPoint) { annotation.x = targetPoint.x; annotation.y = targetPoint.y; }
+        if (browserPoint) { annotation.browser_x = browserPoint.x; annotation.browser_y = browserPoint.y; }
         const compact = await compactImageDataUrl(savedCrop); const fileRef = await uploadAnnotatedImage(compact);
         addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
         return;
@@ -667,6 +674,7 @@
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
       const annotation = annotationBounds(annotationCanvas) || cropAnnotation || (wasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
       if (targetPoint) { annotation.x = targetPoint.x; annotation.y = targetPoint.y; }
+      if (browserPoint) { annotation.browser_x = browserPoint.x; annotation.browser_y = browserPoint.y; }
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
       const compact = await compactImageDataUrl(composite.toDataURL('image/png')); const fileRef = await uploadAnnotatedImage(compact);
       addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
