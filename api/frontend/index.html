@@ -638,11 +638,11 @@
       return {left:minX/annotationCanvas.width, top:minY/annotationCanvas.height, right:(maxX+1)/annotationCanvas.width, bottom:(maxY+1)/annotationCanvas.height, x:(minX+maxX)/(2*annotationCanvas.width), y:(minY+maxY)/(2*annotationCanvas.height), image_width:annotationCanvas.width, image_height:annotationCanvas.height};
     }
 
-    async function compactImageDataUrl(dataUrl, maxDimension = 1600) {
+    async function compactImageDataUrl(dataUrl, maxWidth = 1200, maxHeight = 1600) {
       const source = new Image(); source.src = dataUrl;
       try { await source.decode(); } catch (_) {}
       if (!source.naturalWidth || !source.naturalHeight) return dataUrl;
-      const scale = Math.min(1, maxDimension / Math.max(source.naturalWidth, source.naturalHeight));
+      const scale = Math.min(1, maxWidth / source.naturalWidth, maxHeight / source.naturalHeight);
       const compact = document.createElement('canvas'); compact.width = Math.max(1, Math.round(source.naturalWidth * scale)); compact.height = Math.max(1, Math.round(source.naturalHeight * scale));
       compact.getContext('2d').drawImage(source, 0, 0, compact.width, compact.height);
       return compact.toDataURL('image/jpeg', 0.82);
