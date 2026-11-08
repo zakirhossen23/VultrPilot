@@ -202,11 +202,13 @@
     let selectedFiles = [];
     const STORAGE_KEY = 'vultrpilot-chat-history-v1';
     const historyList = document.querySelector('#history-list');
-    const sessionId = (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    const createSessionId = () => (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    let sessionId = createSessionId();
     let activeThinking = null;
     let liveBrowserCard = null;
     let liveBrowserFrame = null;
     let liveSocket = null;
+    let reconnectTimer = null;
 
     function setSidebarVisible(visible) {
       workspace.classList.toggle('sidebar-hidden', !visible);
@@ -246,7 +248,9 @@
         if (message.type === 'execution_output') showExecutionOutput(message.data?.chunk || '');
         if (message.type === 'browser_error' && activeThinking) activeThinking.textContent = `Browser error: ${message.data?.message || 'unknown error'}`;
       };
-      liveSocket.onclose = () => setTimeout(connectLiveUpdates, 1500);
+      liveSocket.onclose = () => {
+        if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connectLiveUpdates(); }, 1500);
+      };
     }
 
     function showApprovalRequest(data) {
@@ -740,6 +744,10 @@
     clear.addEventListener('click', () => {
       localStorage.removeItem(STORAGE_KEY); messages.innerHTML = '';
       resetLiveBrowser();
+      sessionId = createSessionId();
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (liveSocket) { liveSocket.close(); liveSocket = null; }
+      connectLiveUpdates();
       renderHistoryList();
       messages.appendChild(empty || Object.assign(document.createElement('div'), {className:'empty', innerHTML:'<h1>What can I browse for you?</h1><p>VultrPilot uses Qwen and an isolated browser on your Vultr VM.</p>'}));
     });
