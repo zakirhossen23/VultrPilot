@@ -810,7 +810,7 @@
         messages.querySelectorAll('.approval-request[data-approved="true"]').forEach(card => card.remove());
         saveHistory();
         requestAnimationFrame(() => thinking.closest('.message')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-      } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = friendlyError(error.message); thinking.dataset.raw = thinking.textContent; saveHistory(); }
+      } catch (error) { clearInterval(statusTimer); messages.querySelectorAll('.chat-image[data-pending="true"]').forEach(image => { delete image.dataset.pending; }); thinking.classList.remove('thinking'); thinking.textContent = friendlyError(error.message); thinking.dataset.raw = thinking.textContent; saveHistory(); }
       finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
     });
     input.addEventListener('input', updateContextMeter);
