@@ -27,6 +27,8 @@
     .workspace { --chat-width:58%; flex:1; min-height:0; display:grid; grid-template-columns:minmax(360px,var(--chat-width)) 8px minmax(320px,1fr); gap:0; width:100%; }
     .workspace.sidebar-hidden { grid-template-columns:minmax(0,1fr) 0 0; }
     .workspace.sidebar-hidden #browser-sidebar, .workspace.sidebar-hidden .splitter { display:none; }
+    .workspace.sidebar-hidden main { padding-right:0; }
+    .workspace.sidebar-hidden #messages, .workspace.sidebar-hidden form, .workspace.sidebar-hidden .file-list, .workspace.sidebar-hidden .approval-controls, .workspace.sidebar-hidden .hint { width:100%; max-width:1200px; margin-left:auto; margin-right:auto; }
     .sidebar-toggle { position:fixed; top:74px; right:18px; z-index:20; width:30px; height:42px; min-width:30px; padding:0; border:1px solid var(--line); border-radius:10px 0 0 10px; color:#dce6ff; background:#17264a; box-shadow:0 6px 18px #050a16aa; font-size:20px; line-height:1; }
     .sidebar-toggle:hover { background:#2b4071; border-color:var(--accent); }
     main { min-width:0; min-height:0; display:flex; flex-direction:column; justify-content:flex-end; padding-right:12px; }
