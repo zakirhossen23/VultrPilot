@@ -446,7 +446,7 @@
       const stage = document.createElement('div'); stage.className = 'annotation-stage';
       const img = document.createElement('img'); img.src = `data:image/png;base64,${data.screenshot_base64}`; img.alt = 'Isolated browser screenshot';
       const canvas = document.createElement('canvas'); stage.append(img, canvas); frame.append(tools, stage);
-      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false, croppedImageDataUrl = null;
+      let tool = 'pen', drawing = false, start = null, snapshot = null, undoStack = [], redoStack = [], imageUndoStack = [], imageRedoStack = [], placed = [], moving = null, gestureStart = null, gestureEnd = null, cropSelection = null, cropSnapshot = null, bakedAnnotation = null, imageWasCropped = false, croppedImageDataUrl = null, annotationPoint = null, bakedTargetPoint = null;
       let annotationColor = '#ff304f';
       let textSize = 28;
       function colorWithAlpha(hex, alpha) {
@@ -472,6 +472,7 @@
       }
       function resetAnnotationInteraction() {
         drawing=false; moving=null; start=null; gestureStart=null; gestureEnd=null; snapshot=null;
+        annotationPoint=null; bakedTargetPoint=null;
         if (cropSelection && cropSnapshot) canvas.getContext('2d').putImageData(cropSnapshot, 0, 0);
         cropSelection=null; cropSnapshot=null;
       }
@@ -504,7 +505,7 @@
               cropSelection = null; cropSnapshot = null;
               applyCrop(pendingCrop);
             }
-            addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped); return;
+            addAnnotatedToChat(img, canvas, data.url || '', croppedImageDataUrl, bakedAnnotation, imageWasCropped, annotationPoint || bakedTargetPoint); return;
           }
           if (name === 'clear') { resetAnnotationInteraction(); undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height)); redoStack=[]; ctx.clearRect(0, 0, canvas.width, canvas.height); activatePenAfterHistoryAction(); return; }
           if (name !== 'crop' && cropSelection && cropSnapshot) {
@@ -529,10 +530,14 @@
           const ay1 = Math.max(top, existingAnnotation.top * img.naturalHeight);
           const ax2 = Math.min(right, existingAnnotation.right * img.naturalWidth);
           const ay2 = Math.min(bottom, existingAnnotation.bottom * img.naturalHeight);
-          bakedAnnotation = ax2 > ax1 && ay2 > ay1 ? {
+        bakedAnnotation = ax2 > ax1 && ay2 > ay1 ? {
             left:(ax1-left)/width, top:(ay1-top)/height, right:(ax2-left)/width, bottom:(ay2-top)/height,
             x:(ax1+ax2)/(2*width), y:(ay1+ay2)/(2*height), image_width:width, image_height:height
           } : null;
+        }
+        if (annotationPoint) {
+          const pointX = annotationPoint.x * img.naturalWidth, pointY = annotationPoint.y * img.naturalHeight;
+          bakedTargetPoint = {x:Math.max(0, Math.min(1, (pointX-left)/width)), y:Math.max(0, Math.min(1, (pointY-top)/height))};
         }
         imageUndoStack.push(captureImageState()); imageRedoStack=[]; imageWasCropped = true;
         const cropped=document.createElement('canvas'); cropped.width=width; cropped.height=height;
@@ -541,13 +546,14 @@
         img.src=croppedImageDataUrl; cropSelection=null; placed=[]; undoStack=[]; redoStack=[];
       }
       function captureImageState() {
-        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped, croppedImageDataUrl };
+        return { src:img.src, overlay:canvas.width && canvas.height ? canvas.toDataURL('image/png') : '', placed:placed.map(item => ({...item})), bakedAnnotation: bakedAnnotation ? {...bakedAnnotation} : null, imageWasCropped, croppedImageDataUrl, bakedTargetPoint: bakedTargetPoint ? {...bakedTargetPoint} : null };
       }
       function restoreImageState(state) {
         placed=(state.placed || []).map(item => ({...item}));
         bakedAnnotation = state.bakedAnnotation ? {...state.bakedAnnotation} : null;
         imageWasCropped = Boolean(state.imageWasCropped);
         croppedImageDataUrl = state.croppedImageDataUrl || null;
+        bakedTargetPoint = state.bakedTargetPoint ? {...state.bakedTargetPoint} : null;
         img.onload=() => {
           canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
           if (!state.overlay) { img.onload=resetCanvasForImage; return; }
@@ -559,7 +565,7 @@
       frame.updateScreenshot = next => {
         const ctx = canvas.getContext('2d');
         if (canvas.width && canvas.height) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false; croppedImageDataUrl = null;
+        undoStack = []; redoStack = []; imageUndoStack = []; imageRedoStack = []; placed = []; moving = null; drawing = false; bakedAnnotation = null; imageWasCropped = false; croppedImageDataUrl = null; annotationPoint = null; bakedTargetPoint = null;
         img.src = `data:image/png;base64,${next.screenshot_base64 || ''}`;
       };
       const point = event => { const rect = canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
@@ -612,7 +618,7 @@
         }
         else { ctx.beginPath(); ctx.moveTo(start.x,start.y); ctx.lineTo(p.x,p.y); ctx.stroke(); start=p; }
       });
-      canvas.addEventListener('pointerup', () => { if (tool === 'crop' && drawing && gestureStart && gestureEnd) { const movedCrop=Math.hypot(gestureEnd.x-gestureStart.x,gestureEnd.y-gestureStart.y)>6; if (movedCrop) { cropSelection={x1:gestureStart.x,y1:gestureStart.y,x2:gestureEnd.x,y2:gestureEnd.y}; cropSnapshot=snapshot; drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; return; } } if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
+      canvas.addEventListener('pointerup', () => { if (tool === 'crop' && drawing && gestureStart && gestureEnd) { const movedCrop=Math.hypot(gestureEnd.x-gestureStart.x,gestureEnd.y-gestureStart.y)>6; if (movedCrop) { cropSelection={x1:gestureStart.x,y1:gestureStart.y,x2:gestureEnd.x,y2:gestureEnd.y}; cropSnapshot=snapshot; drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; return; } } if (moving) { const dx=moving.left-moving.oldLeft, dy=moving.top-moving.oldTop; moving.target.left+=dx; moving.target.right+=dx; moving.target.top+=dy; moving.target.bottom+=dy; moving=null; } else if (drawing && gestureStart && gestureEnd && tool !== 'text') { const pad=tool === 'arrow' ? Math.max(textSize, canvas.width/38) : Math.max(textSize/2,4); placed.push({left:Math.min(gestureStart.x,gestureEnd.x)-pad,top:Math.min(gestureStart.y,gestureEnd.y)-pad,right:Math.max(gestureStart.x,gestureEnd.x)+pad,bottom:Math.max(gestureStart.y,gestureEnd.y)+pad}); annotationPoint = tool === 'arrow' ? {x:gestureEnd.x/canvas.width, y:gestureEnd.y/canvas.height} : null; } drawing=false; snapshot=null; gestureStart=null; gestureEnd=null; });
       return frame;
     }
 
@@ -644,11 +650,12 @@
       return {...payload, absolute_url:new URL(payload.url, location.origin).href};
     }
 
-    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false) {
+    async function addAnnotatedToChat(img, annotationCanvas, sourceUrl, cropDataUrl = null, cropAnnotation = null, wasCropped = false, targetPoint = null) {
       const existingCanvasAnnotation = annotationBounds(annotationCanvas);
       const savedCrop = cropDataUrl;
       if (savedCrop && !existingCanvasAnnotation) {
         const annotation = cropAnnotation || {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'};
+        if (targetPoint) { annotation.x = targetPoint.x; annotation.y = targetPoint.y; }
         const compact = await compactImageDataUrl(savedCrop); const fileRef = await uploadAnnotatedImage(compact);
         addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
         return;
@@ -659,6 +666,7 @@
       const composite = document.createElement('canvas'); composite.width = img.naturalWidth; composite.height = img.naturalHeight;
       const ctx = composite.getContext('2d'); ctx.drawImage(img, 0, 0); ctx.drawImage(annotationCanvas, 0, 0);
       const annotation = annotationBounds(annotationCanvas) || cropAnnotation || (wasCropped ? {left:0, top:0, right:1, bottom:1, x:0.5, y:0.5, image_width:img.naturalWidth, image_height:img.naturalHeight, type:'crop'} : null);
+      if (targetPoint) { annotation.x = targetPoint.x; annotation.y = targetPoint.y; }
       if (!annotation) { addMessage('assistant', 'Draw an annotation first, then choose Add to chat.'); return; }
       const compact = await compactImageDataUrl(composite.toDataURL('image/png')); const fileRef = await uploadAnnotatedImage(compact);
       addImageMessage(compact, sourceUrl, true, annotation, true, fileRef);
