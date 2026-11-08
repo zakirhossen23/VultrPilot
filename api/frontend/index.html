@@ -116,6 +116,8 @@
     .file-list { display:flex; gap:7px; flex-wrap:wrap; padding-top:8px; }
     .approval-controls { display:flex; align-items:center; gap:8px; padding:9px 2px 0; color:var(--muted); font-size:11px; }
     .file-chip { padding:5px 9px; border:1px solid var(--line); border-radius:7px; color:#cbd6ef; background:#0d172a; font-size:11px; }
+    .file-chip.image-chip { display:inline-flex; align-items:center; gap:7px; padding:4px 7px; }
+    .file-thumb { width:34px; height:34px; object-fit:cover; border-radius:5px; background:#fff; }
     .file-remove { margin-left:6px; padding:0 3px; min-width:auto; border:0; color:#aebdff; background:transparent; font-size:14px; line-height:1; }
     .file-attachments { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .file-preview { width:150px; max-height:150px; object-fit:cover; border:1px solid var(--line); border-radius:8px; background:#fff; }
@@ -342,7 +344,9 @@
     function renderSelectedFiles() {
       fileList.innerHTML = '';
       selectedFiles.forEach((file, index) => {
-        const chip = document.createElement('span'); chip.className = 'file-chip'; chip.textContent = `${file.name} · ${(file.size/1024).toFixed(0)} KB`;
+        const chip = document.createElement('span'); chip.className = `file-chip${file.type?.startsWith('image/') ? ' image-chip' : ''}`;
+        if (file.type?.startsWith('image/')) { const thumb = document.createElement('img'); thumb.className='file-thumb'; thumb.src=URL.createObjectURL(file); thumb.alt=file.name; chip.appendChild(thumb); }
+        const label = document.createElement('span'); label.textContent = `${file.name} · ${(file.size/1024).toFixed(0)} KB`; chip.appendChild(label);
         const remove = document.createElement('button'); remove.className = 'file-remove'; remove.type = 'button'; remove.textContent = '×'; remove.title = `Remove ${file.name}`;
         remove.addEventListener('click', () => { selectedFiles.splice(index, 1); renderSelectedFiles(); });
         chip.appendChild(remove); fileList.appendChild(chip);
@@ -767,6 +771,15 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
     attach.addEventListener('click', () => filePicker.click());
     filePicker.addEventListener('change', () => { selectedFiles = [...filePicker.files].slice(0, 10); renderSelectedFiles(); });
+    input.addEventListener('paste', event => {
+      const imageItem = [...(event.clipboardData?.items || [])].find(item => item.type.startsWith('image/'));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile(); if (!file) return;
+      const extension = file.type.split('/')[1] || 'png';
+      const pasted = new File([file], `pasted-image-${Date.now()}.${extension}`, {type:file.type});
+      selectedFiles = [...selectedFiles, pasted].slice(0, 10);
+      renderSelectedFiles(); event.preventDefault();
+    });
 
     clear.addEventListener('click', () => {
       localStorage.removeItem(STORAGE_KEY); messages.innerHTML = '';
