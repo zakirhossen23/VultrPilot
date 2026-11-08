@@ -305,8 +305,24 @@
 
     function showVisionAnalysis(data) {
       const card = document.createElement('div'); card.className = 'event intermediate-activity';
-      card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div>${renderMarkdown(data.message || 'No visual analysis returned.')}`;
+      let parsed = null;
+      try { parsed = JSON.parse(data.message || '{}'); } catch (_) {}
+      if (parsed && typeof parsed === 'object' && parsed.status) {
+        const title = parsed.status === 'needs_clarification' ? 'Vision needs a clearer target' : 'Vision target verified';
+        const target = parsed.target || parsed.label || 'No reliable target identified';
+        const page = parsed.page_url ? `<div class="meta">Page: ${escapeHtml(parsed.page_url)}</div>` : '';
+        card.innerHTML = `<strong>${title}</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div><div>Target: ${escapeHtml(target)}</div>${page}`;
+      } else {
+        card.innerHTML = `<strong>Vision verification</strong><div class="meta">${escapeHtml(data.model || 'Vultr vision model')}</div><div>${escapeHtml(data.message || 'No visual analysis returned.')}</div>`;
+      }
       messages.appendChild(card); messages.scrollTop = messages.scrollHeight;
+    }
+
+    function friendlyError(message) {
+      const value = String(message || '');
+      if (value.includes('context_length_exceeded') || value.includes('context limit')) return 'The image or conversation is too large. Please crop the target or start a new chat and try again.';
+      if (value.includes('No usable annotated image')) return 'I could not read a usable image. Please attach the screenshot again.';
+      return 'I couldn’t complete that request. Please try again or make the target more specific.';
     }
 
     function readHistory() {
@@ -772,7 +788,7 @@
         messages.querySelectorAll('.approval-request[data-approved="true"]').forEach(card => card.remove());
         saveHistory();
         requestAnimationFrame(() => thinking.closest('.message')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-      } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = `Sorry, I couldn’t complete that: ${error.message}`; thinking.dataset.raw = thinking.textContent; saveHistory(); }
+      } catch (error) { clearInterval(statusTimer); thinking.classList.remove('thinking'); thinking.textContent = friendlyError(error.message); thinking.dataset.raw = thinking.textContent; saveHistory(); }
       finally { activeThinking = null; send.disabled = false; send.textContent = 'Send'; input.focus(); }
     });
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
