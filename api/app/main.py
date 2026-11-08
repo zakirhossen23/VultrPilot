@@ -46,6 +46,7 @@ client = AsyncOpenAI(
     base_url=os.getenv("QWEN_BASE_URL", "https://api.vultrinference.com/v1"),
 )
 VISION_MODEL = os.getenv("QWEN_VISION_MODEL", "qwen3.8-27b")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://vultrpilot.baharsoftbd.com").rstrip("/")
 
 
 async def analyze_annotated_images(annotations: list[dict[str, Any]], attachments: list[dict[str, Any]] | None = None, image_urls: list[str] | None = None, user_instruction: str = "") -> dict[str, Any]:
@@ -66,11 +67,17 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]], attachment
     }]
     image_inputs = list(annotations[-1:])
     if not image_inputs:
-        image_inputs = [item for item in (attachments or []) if str(item.get("content_type", "")).startswith("image/")][-1:]
+        image_inputs = [item for item in (attachments or []) if (
+            str(item.get("content_type", "")).startswith("image/")
+            or "/files/" in str(item.get("url", ""))
+            or Path(str(item.get("name", ""))).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+        )][-1:]
     image_inputs.extend({"image_url": url} for url in (image_urls or [])[-1:])
     for item in image_inputs:
-        image_url = item.get("image_url") or item.get("file_url")
+        image_url = item.get("image_url") or item.get("file_url") or item.get("url")
         image_data = item.get("image_data")
+        if isinstance(image_url, str) and image_url.startswith("/"):
+            image_url = PUBLIC_BASE_URL + image_url
         if isinstance(image_url, str) and image_url.startswith(("https://", "http://")):
             content.append({"type": "image_url", "image_url": {"url": image_url, "detail": "low"}})
         elif isinstance(image_data, str) and image_data.startswith("data:image/"):
@@ -432,7 +439,11 @@ async def chat(request: ChatRequest):
     if request.attachments:
         names = ", ".join(str(item.get("name", "attachment")) for item in request.attachments[:10])
         user_content += f"\n\nAttached files available for this session (metadata only; contents are not sent to Qwen): {names}"
-    image_attachments = [item for item in request.attachments if str(item.get("content_type", "")).startswith("image/")]
+    image_attachments = [item for item in request.attachments if (
+        str(item.get("content_type", "")).startswith("image/")
+        or "/files/" in str(item.get("url", ""))
+        or Path(str(item.get("name", ""))).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    )]
     pasted_image_urls = [url.rstrip(".,") for url in re.findall(r"https?://[^\s)\]>\"]+", request.message) if "/files/" in url][-2:]
     if request.annotations or image_attachments or pasted_image_urls:
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
