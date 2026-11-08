@@ -186,6 +186,7 @@ TOOLS = [
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     current_url: str | None = Field(default=None, max_length=2000)
+    vision_enabled: bool = False
     history: list[dict[str, str]] = Field(default_factory=list, max_length=30)
     session_id: str | None = Field(default=None, max_length=100)
     attachments: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
@@ -451,7 +452,7 @@ async def chat(request: ChatRequest):
     pasted_image_urls = [url.rstrip(".,") for url in re.findall(r"https?://[^\s)\]>\"]+", request.message) if "/files/" in url][-2:]
     vision_words = re.search(r"\b(annotat(?:e|ed|ion)?|marked|highlight(?:ed)?|arrow|rectangle|circle|screenshot|image|pictured|shown)\b", request.message, re.IGNORECASE)
     explicitly_without_annotation = re.search(r"\bwithout\s+annotat", request.message, re.IGNORECASE)
-    vision_requested = not explicitly_without_annotation and bool(request.annotations or vision_words)
+    vision_requested = request.vision_enabled and not explicitly_without_annotation
     if vision_requested and (request.annotations or image_attachments or pasted_image_urls):
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
         vision_analysis = await analyze_annotated_images(request.annotations, image_attachments, pasted_image_urls, request.message)
