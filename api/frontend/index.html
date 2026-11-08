@@ -779,6 +779,7 @@
       const previousHistory = readHistory();
       const filesForUpload = [...selectedFiles];
       const userBubble = addMessage('user', text || `Attached ${filesForUpload.length} file${filesForUpload.length === 1 ? '' : 's'}`); input.value = ''; selectedFiles = []; filePicker.value = ''; renderSelectedFiles(); send.disabled = true; send.textContent = 'Working…';
+      messages.querySelectorAll('.intermediate-activity').forEach(card => card.remove());
       const thinking = addMessage('assistant', 'Planning your request…');
       activeThinking = thinking; resetLiveBrowser();
       thinking.classList.add('thinking');

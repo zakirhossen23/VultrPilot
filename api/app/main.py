@@ -452,7 +452,8 @@ async def chat(request: ChatRequest):
     pasted_image_urls = [url.rstrip(".,") for url in re.findall(r"https?://[^\s)\]>\"]+", request.message) if "/files/" in url][-2:]
     vision_words = re.search(r"\b(annotat(?:e|ed|ion)?|marked|highlight(?:ed)?|arrow|rectangle|circle|screenshot|image|pictured|shown)\b", request.message, re.IGNORECASE)
     explicitly_without_annotation = re.search(r"\bwithout\s+annotat", request.message, re.IGNORECASE)
-    vision_requested = request.vision_enabled and not explicitly_without_annotation
+    dom_action = re.match(r"^\s*(click|open|go|select|press|choose|visit|find)\b", request.message, re.IGNORECASE)
+    vision_requested = request.vision_enabled and not explicitly_without_annotation and not (dom_action and not vision_words)
     if vision_requested and (request.annotations or image_attachments or pasted_image_urls):
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
         vision_analysis = await analyze_annotated_images(request.annotations, image_attachments, pasted_image_urls, request.message)
