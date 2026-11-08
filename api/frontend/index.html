@@ -362,14 +362,14 @@
       const formData = new FormData(); formData.append('file', file);
       const response = await fetch('/files', {method:'POST', body:formData});
       const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || `Could not upload ${file.name}`);
-      return payload;
+      return {...payload, absolute_url:new URL(payload.url, location.origin).href};
     }
 
     function showUploadedAttachment(bubble, file) {
       const container = bubble.querySelector('.file-attachments') || Object.assign(document.createElement('div'), {className:'file-attachments'});
       if (!container.parentElement) bubble.appendChild(container);
       if (file.content_type?.startsWith('image/')) {
-        const image = document.createElement('img'); image.className='file-preview'; image.src=file.url; image.alt=file.name; image.title=file.name; container.appendChild(image);
+        const image = document.createElement('img'); image.className='file-preview'; image.src=file.absolute_url || file.url; image.alt=file.name; image.title=file.name; container.appendChild(image);
       } else {
         const chip = document.createElement('span'); chip.className='file-chip'; chip.textContent=`${file.name} · ${(file.size/1024).toFixed(0)} KB`; container.appendChild(chip);
       }
@@ -759,7 +759,7 @@
           if (!image.dataset.annotation) return null;
           try { return {source_url:image.dataset.sourceUrl || '', file_id:image.dataset.fileId || '', image_url:image.dataset.imageUrl || '', image_data:image.dataset.imageUrl ? '' : image.src, annotation:JSON.parse(image.dataset.annotation)}; } catch (_) { return null; }
         }).filter(Boolean).slice(-1);
-        const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
+        const response = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text || 'Please act on the attached annotation.', attachments:uploaded.map(file => ({id:file.id, name:file.name, content_type:file.content_type, size:file.size, url:file.absolute_url || file.url})), annotations, approval_mode:approvalMode.value, session_id:sessionId, history:previousHistory.map(item => ({role:item.role, content:item.text}))}) });
         const payload = await response.json(); if (!response.ok) throw new Error(payload.detail || 'The request failed.');
         pendingImages.forEach(image => { delete image.dataset.pending; });
         clearInterval(statusTimer); thinking.classList.remove('thinking');

@@ -47,7 +47,7 @@ client = AsyncOpenAI(
 VISION_MODEL = os.getenv("QWEN_VISION_MODEL", "qwen3.8-27b")
 
 
-async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> dict[str, Any]:
+async def analyze_annotated_images(annotations: list[dict[str, Any]], attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Verify the marked screenshot with a multimodal Vultr model before actions."""
     content: list[dict[str, Any]] = [{
         "type": "text",
@@ -55,11 +55,16 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> dict[st
             "Analyze the attached browser screenshot(s). Each image contains a user annotation. "
             "Identify the marked target, its visible label, approximate location, and whether it "
             "appears to be a normal public-page control. Do not click or claim an action. "
-            "Return JSON only with keys target, label, control_type, confidence, and observation. "
+            "If this is a pasted screenshot, also estimate browser_x and browser_y normalized to the full image, "
+            "and extract page_url if visible in the browser address bar. Return JSON only with keys target, label, "
+            "control_type, confidence, browser_x, browser_y, page_url, and observation. "
             "Keep observation under 500 words."
         ),
     }]
-    for item in annotations[-1:]:
+    image_inputs = list(annotations[-1:])
+    if not image_inputs:
+        image_inputs = [item for item in (attachments or []) if str(item.get("content_type", "")).startswith("image/")][-1:]
+    for item in image_inputs:
         image_url = item.get("image_url") or item.get("file_url")
         image_data = item.get("image_data")
         if isinstance(image_url, str) and image_url.startswith(("https://", "http://")):
@@ -88,6 +93,9 @@ async def analyze_annotated_images(annotations: list[dict[str, Any]]) -> dict[st
         "label": str(structured.get("label", ""))[:500],
         "control_type": str(structured.get("control_type", ""))[:120],
         "confidence": structured.get("confidence"),
+        "browser_x": structured.get("browser_x"),
+        "browser_y": structured.get("browser_y"),
+        "page_url": str(structured.get("page_url", ""))[:500],
         "observation": raw[:1800],
     }
 
@@ -400,6 +408,7 @@ async def chat(request: ChatRequest):
                 "For a click request, call browser_task with action click and a precise CSS selector. "
                 "If attached_annotations are present and the user refers to a highlighted or marked area, first use action analyze_point with the supplied normalized x and y coordinates. Explain the identified element, then use action click_point with the same coordinates only when the requested action is safe and the analysis matches the target. "
                 "For cropped annotations, use the annotation's browser_x and browser_y coordinates for browser actions; x and y describe the cropped image for vision only. "
+                "If a pasted screenshot supplies pasted_image_target with a page URL and normalized x/y, use click_point with those coordinates after vision verification and approval. "
                 "If a selector click fails because the page changed or the selector no longer matches, retry with action click_point using the verified annotation coordinates instead of claiming failure. "
                 "Never claim that a click happened unless the returned browser result has action=click. "
                 "If the user asks for browser sessions, call list_browser_sessions. "
@@ -417,13 +426,17 @@ async def chat(request: ChatRequest):
     if request.attachments:
         names = ", ".join(str(item.get("name", "attachment")) for item in request.attachments[:10])
         user_content += f"\n\nAttached files available for this session (metadata only; contents are not sent to Qwen): {names}"
-    if request.annotations:
+    image_attachments = [item for item in request.attachments if str(item.get("content_type", "")).startswith("image/")]
+    if request.annotations or image_attachments:
         await publish(request.session_id, {"type": "status", "data": {"message": "Vision model is analyzing the annotated screenshot", "phase": "vision_analysis"}})
-        vision_analysis = await analyze_annotated_images(request.annotations)
+        vision_analysis = await analyze_annotated_images(request.annotations, image_attachments)
         vision_message = json.dumps(vision_analysis, ensure_ascii=False)
         await publish(request.session_id, {"type": "analysis", "data": {"model": VISION_MODEL, "message": vision_message}})
         user_content += "\n\nCompact vision verification from " + VISION_MODEL + " (JSON only; the image is not passed to the planner):\n" + vision_message
-        user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[-1:]])
+        if request.annotations:
+            user_content += "\n\nattached_annotations (normalized coordinates; use analyze_point first, then click_point only after this visual verification): " + json.dumps([{k:v for k,v in item.items() if k != "image_data"} for item in request.annotations[-1:]])
+        elif vision_analysis.get("browser_x") is not None and vision_analysis.get("browser_y") is not None:
+            user_content += "\n\npasted_image_target (use click_point only after approval): " + json.dumps({"url": vision_analysis.get("page_url"), "x": vision_analysis.get("browser_x"), "y": vision_analysis.get("browser_y")})
     messages.append({"role": "user", "content": user_content})
 
     try:
