@@ -203,6 +203,7 @@
     const sidebarToggle = document.querySelector('#sidebar-toggle');
     let selectedFiles = [];
     const STORAGE_KEY = 'vultrpilot-chat-history-v1';
+    const APPROVAL_MODE_KEY = 'vultrpilot-approval-mode-v1';
     const historyList = document.querySelector('#history-list');
     const createSessionId = () => (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     let sessionId = createSessionId();
@@ -211,6 +212,10 @@
     let liveBrowserFrame = null;
     let liveSocket = null;
     let reconnectTimer = null;
+
+    const savedApprovalMode = localStorage.getItem(APPROVAL_MODE_KEY);
+    if (savedApprovalMode && [...approvalMode.options].some(option => option.value === savedApprovalMode)) approvalMode.value = savedApprovalMode;
+    approvalMode.addEventListener('change', () => localStorage.setItem(APPROVAL_MODE_KEY, approvalMode.value));
 
     function setSidebarVisible(visible) {
       workspace.classList.toggle('sidebar-hidden', !visible);
